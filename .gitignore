@@ -1,4 +1,5 @@
 Gemfile.lock
+/.ruby-version
 .rspec_status
 /.bundle/
 /pkg
@@ -17,6 +18,7 @@ _yardoc
 /lib/measures/test_results/*
 /lib/measures/test_results
 /lib/measures/*/tests/output
-/lib/measures/*/tests/tbd.json
+
+runner.conf
 
 *.DS_Store
