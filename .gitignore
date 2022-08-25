@@ -1,0 +1,22 @@
+Gemfile.lock
+.rspec_status
+/.bundle/
+/pkg
+
+.yardoc
+_yardoc
+/doc
+/rdoc
+
+/spec/*_suite_runs/
+/spec/files/osms/out/*
+# /spec/files/measures/*
+/spec/files/ua/*
+/json/*out.json
+
+/lib/measures/test_results/*
+/lib/measures/test_results
+/lib/measures/*/tests/output
+/lib/measures/*/tests/tbd.json
+
+*.DS_Store
