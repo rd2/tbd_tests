@@ -9174,7 +9174,11 @@ RSpec.describe TBD_Tests do
     expect(ua1_md.empty?).to be(false)
     ua1_md.each { |x| expect(x.is_a?(String)).to be(true) }
     path1 = File.join(__dir__, "files/ua/ua1.md")
-    File.open(path1, "w") { |f| f.puts ua1_md }
+
+    File.open(path1, "w") do |f|
+      f.puts ua1_md
+    end
+
 
     # Alternate output UA' MD file.
     argh2[:ua_ref          ] = "code (Quebec)"
@@ -9191,7 +9195,10 @@ RSpec.describe TBD_Tests do
     expect(ua2_md.empty?).to be(false)
     ua2_md.each { |x| expect(x.is_a?(String)).to be(true) }
     path2 = File.join(__dir__, "files/ua/ua2.md")
-    File.open(path2, "w") { |f| f.puts ua2_md }
+
+    File.open(path2, "w") do |f|
+      f.puts ua2_md
+    end
 
     # Both output UA' MD files should be identical.
     expect(TBD.status).to eq(0)
@@ -9233,7 +9240,10 @@ RSpec.describe TBD_Tests do
 
     out3  = JSON.pretty_generate(argh3[:io])
     file3 = File.join(__dir__, "../json/tbd_warehouse14.out.json")
-    File.open(file3, "w") { |f| f.puts out3 }
+
+    File.open(file3, "w") do |f|
+      f.puts out3
+    end
 
     # Nice. Both TBD JSON output files are identical!
     # "/../json/tbd_warehouse12.out.json" vs "/../json/tbd_warehouse14.out.json"
