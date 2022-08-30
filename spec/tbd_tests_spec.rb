@@ -9173,7 +9173,7 @@ RSpec.describe TBD_Tests do
     expect(ua1_md.is_a?(Array)).to be(true)
     expect(ua1_md.empty?).to be(false)
     ua1_md.each { |x| expect(x.is_a?(String)).to be(true) }
-    path1 = File.join(__dir__, "files/ua/ua1.md")
+    path1 = File.join(__dir__, "files/ua/ua1__md")
 
     File.open(path1, "w") do |f|
       f.puts ua1_md
@@ -9194,7 +9194,7 @@ RSpec.describe TBD_Tests do
     expect(ua2_md.is_a?(Array)).to be(true)
     expect(ua2_md.empty?).to be(false)
     ua2_md.each { |x| expect(x.is_a?(String)).to be(true) }
-    path2 = File.join(__dir__, "files/ua/ua2.md")
+    path2 = File.join(__dir__, "files/ua/ua2__md")
 
     File.open(path2, "w") do |f|
       f.puts ua2_md
