@@ -5,7 +5,7 @@ require "tbd_tests/version"
 Gem::Specification.new do |s|
   # Specify which files should be added to the gem when it is released.
   # "git ls-files -z" loads files in the RubyGem that have been added into git.
-  s.files                 = Dir.chdir(File.expand_path("..", __FILE__)) do
+  s.files = Dir.chdir(File.expand_path("..", __FILE__)) do
     `git ls-files -z`.split("\x0").reject do |f|
       f.match(%r{^(test|spec|features)/})
     end
@@ -45,7 +45,7 @@ Gem::Specification.new do |s|
     s.add_development_dependency "openstudio-model-articulation", "~> 0.5.0"
   end
 
-  s.metadata["homepage_uri"]    = s.homepage
+  s.metadata["homepage_uri"   ] = s.homepage
   s.metadata["source_code_uri"] = "#{s.homepage}/tree/v#{s.version}"
   s.metadata["bug_tracker_uri"] = "#{s.homepage}/issues"
 end

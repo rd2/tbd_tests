@@ -2,8 +2,7 @@
 	"seed_file": null,
 	"weather_file": null,
 	"measure_paths": [
-    "../../files/measures",
-    "../../../lib/measures"
+    "../../files/measures"
   ],
 	"file_paths": [
     ".",
@@ -17,7 +16,7 @@
       "measure_dir_name": "tbd",
       "arguments": {
         "__SKIP__": false,
-        "option": "regular"
+        "option": "poor (BETBG)"
       }
 		},
     {

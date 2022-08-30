@@ -1,11 +1,14 @@
 {
 	"seed_file": null,
-	"weather_file": "srrl_2013_amy.epw",
+	"weather_file": "CAN_PQ_Quebec.717140_CWEC.epw",
 	"measure_paths": [
-    "../../files/measures",
-    "../../../lib/measures"
+    "../../files/measures"
   ],
-	"file_paths": [".", "../../files/epws", ""],
+	"file_paths": [
+    ".",
+    "../../files/epws",
+    ""
+  ],
 	"run_directory": null,
 	"steps": [
     {
@@ -21,7 +24,7 @@
       "measure_dir_name": "tbd",
       "arguments": {
         "__SKIP__": false,
-        "option": "regular"
+        "option": "poor (BETBG)"
       }
 		},
     {

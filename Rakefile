@@ -1,102 +1,84 @@
 require "bundler/gem_tasks"
 require "rspec/core/rake_task"
+require "fileutils"
 
 RSpec::Core::RakeTask.new(:spec) do |t|
-    t.rspec_opts = '--exclude-pattern \'spec/**/*suite_spec.rb\''
+  t.rspec_opts = "--exclude-pattern \'spec/**/*suite_spec.rb\'"
 end
 
 task default: :spec
 
-desc "Update Library Files"
-task :libraries do
-  puts "Updating Library Files"
-
-  require "fileutils"
-
-  libs = ["topolys", "osut", "oslg", "tbd"]
-  lib_files = {}
-
-  $LOAD_PATH.each do |load_path|
-    libs.each do |l|
-      if load_path.include?(l)
-        lib_files[l] = Dir.glob(File.join(load_path, "#{l}/*.rb"))
-
-        unless l == "topolys"
-          lib_files[l].delete_if { |f| f.include?("version.rb") }
-        end
-
-        puts "#{l} lib files:"
-        lib_files[l].each { |lf| puts "... #{lf}" }
-        puts
-      end
-    end
-  end
-
-  dirs = Dir.glob(File.join(__dir__, "lib/measures/*"))
-
-  dirs.each do |dir|
-    lib_files.each do |l, files|
-      files.each { |file| FileUtils.cp(file, "#{dir}/resources/.") }
-    end
-  end
-end
-
-desc "Update Measure"
+desc "Pull TBD Measure"
 task :measure do
-  puts "Updating Measure"
-
-  require "openstudio"
-  require "open3"
-
-  cli = OpenStudio.getOpenStudioCLI
-  command = "#{cli} measure -t './lib/measures'"
-  puts command
-  out, err, ps = Open3.capture3({"BUNDLE_GEMFILE"=>nil}, command)
-  raise "Failed to update measures\n\n#{out}\n\n#{err}" unless ps.success?
+  puts "Pulling TBD Measure"
+  pth = $:.select { |l_pth| l_pth.include?("tbd-") }
+  raise "Missing TBD gem - run 'bundle update'\n"         unless pth.size == 1
+  pth = File.join(pth, "measures/tbd")
+  tbd = File.join(__dir__, "spec/files/measures/tbd")
+  FileUtils.copy_entry(pth, tbd)                          unless Dir.exist?(tbd)
+  raise "TBD Measure from TBD gem?\n"                     unless Dir.exist?(tbd)
 end
-task :measure => [:libraries]
+
+desc "Pull 'OpenStudio Results' Measure"
+task :results do
+  puts "Pulling 'OpenStudio Results' Measure"
+  gem = "openstudio-common-measures"
+  pth = $:.select { |l_pth| l_pth.include?(gem) }
+  raise "Missing '#{gem}' - run 'bundle update'\n"        unless pth.size == 1
+  pth = File.join(pth, "measures/openstudio_results")
+  osm = File.join(__dir__, "spec/files/measures/openstudio_results")
+  FileUtils.copy_entry(pth, osm)                          unless Dir.exist?(osm)
+  raise "'OpenStudio Results' Measure (#{gem})?\n"        unless Dir.exist?(osm)
+end
+
+desc "Pull 'Create DOE Prototype Building' Measure"
+task :prototype do
+  puts "Pulling 'Create DOE Prototype Building' Measure"
+  gem = "openstudio-model-articulation"
+  pth = $:.select { |l_pth| l_pth.include?(gem) }
+  raise "Missing '#{gem}' - run 'bundle update'\n"        unless pth.size == 1
+  pth = File.join(pth, "measures/create_DOE_prototype_building")
+  pro = File.join(__dir__, "spec/files/measures/create_DOE_prototype_building")
+  FileUtils.copy_entry(pth, pro)                          unless Dir.exist?(pro)
+  raise "'Create DOE Prototype Building' (#{gem})?\n"     unless Dir.exist?(pro)
+end
 
 namespace "osm_suite" do
-  desc "Clean OSM Test Suite"
+  desc "Clean TBD OSM Test Suite"
   task :clean do
-    puts "Cleaning OSM Test Suite"
-    osm_suite_runs_dir = File.join(__dir__, "spec", "osm_suite_runs")
-    FileUtils.rm_rf(osm_suite_runs_dir) if File.exists?(osm_suite_runs_dir)
+    puts "Cleaning TBD OSM Test Suite"
+    osm = File.join(__dir__, "spec/osm_suite_runs")
+    FileUtils.rmtree(osm)                                     if Dir.exist?(osm)
   end
 
-  desc "Run OSM Test Suite"
+  desc "Run TBD OSM Test Suite"
   RSpec::Core::RakeTask.new(:run) do |t|
     t.rspec_opts = "--pattern \'spec/tbd_osm_suite_spec.rb\'"
   end
-  task :run => [:measure]
+  task run: [:measure, :results]
 end
 
 namespace "prototype_suite" do
-  desc "Clean Prototype Test Suite"
+  desc "Clean TBD Prototype Test Suite"
   task :clean do
     puts "Cleaning Prototype Test Suite"
-    prototype_suite_runs_dir = File.join(__dir__, "spec", "prototype_suite_runs")
-    FileUtils.rm_rf(prototype_suite_runs_dir) if File.exists?(prototype_suite_runs_dir)
+    pro = File.join(__dir__, "spec/prototype_suite_runs")
+    FileUtils.rmtree(pro)                                     if Dir.exist?(pro)
   end
 
-  desc "Run Prototype Test Suite"
+  desc "Run TBD Prototype Test Suite"
   RSpec::Core::RakeTask.new(:run) do |t|
     t.rspec_opts = "--pattern \'spec/tbd_prototype_suite_spec.rb\'"
   end
-  task :run => [:measure]
+  task run: [:measure, :results, :prototype]
 end
 
 desc "Clean All Test Suites"
-task :suites_clean do
-  puts "Cleaning All Test Suites"
+task suites_clean: ["osm_suite:clean", "prototype_suite:clean"] do
 end
-task :suites_clean => ["osm_suite:clean", "prototype_suite:clean"]
 
 desc "Run All Test Suites"
-task :suites_run do
-  puts "Running All Test Suites"
+task suites_run: ["osm_suite:run", "prototype_suite:run"] do
 end
-task :suites_run => ["osm_suite:run", "prototype_suite:run"]
 
-# default spec test depends on updating measure and library files
-task :spec => [:measure]
+task spec: [:measure]         # default spec test depends on pulling TBD measure
