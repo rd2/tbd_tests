@@ -9168,9 +9168,12 @@ RSpec.describe TBD_Tests do
     expect(ua1.empty?).to be(false)
     expect(ua1.is_a?(Hash)).to be(true)
     expect(ua1.key?(:model))
-    ua1_md_en = TBD.ua_md(ua1, :en)
+    ua1_md = TBD.ua_md(ua1, :en)
+    expect(ua1_md.is_a?(Array)).to be(true)
+    expect(ua1_md.empty?).to be(false)
+    ua1_md.each { |x| expect(x.is_a?(String)).to be(true) }
     path1     = File.join(__dir__, "files/ua/ua1_en.md")
-    File.open(path1, "w") { |f| f.puts ua1_md_en }
+    File.open(path1, "w") { |f| f.puts ua1_md }
 
     # Alternate output UA' MD file.
     argh2[:ua_ref          ] = "code (Quebec)"
@@ -9182,9 +9185,13 @@ RSpec.describe TBD_Tests do
     expect(ua2.empty?).to be(false)
     expect(ua2.is_a?(Hash)).to be(true)
     expect(ua2.key?(:model))
-    ua2_md_en = TBD.ua_md(ua2, :en)
-    path2     = File.join(__dir__, "files/ua/ua2_en.md")
-    File.open(path2, "w") { |f| f.puts ua2_md_en }
+
+    ua2_md = TBD.ua_md(ua2, :en)
+    expect(ua2_md.is_a?(Array)).to be(true)
+    expect(ua2_md.empty?).to be(false)
+    ua2_md.each { |x| expect(x.is_a?(String)).to be(true) }
+    path2 = File.join(__dir__, "files/ua/ua2_en.md")
+    File.open(path2, "w") { |f| f.puts ua2_md }
 
     # Both output UA' MD files should be identical.
     expect(TBD.status).to eq(0)
