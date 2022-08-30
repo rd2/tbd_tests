@@ -9111,7 +9111,7 @@ RSpec.describe TBD_Tests do
     expect(json1.is_a?(Hash)).to be(true)
     expect(json1.key?(:io)).to be(true)
     expect(json1.key?(:surfaces)).to be(true)
-    argh1[:io]       = json1[:io]
+    argh1[:io      ] = json1[:io      ]
     argh1[:surfaces] = json1[:surfaces]
     expect(TBD.status).to eq(0)
     expect(TBD.logs.empty?).to be(true)
@@ -9138,7 +9138,7 @@ RSpec.describe TBD_Tests do
     expect(json2.is_a?(Hash)).to be(true)
     expect(json2.key?(:io)).to be(true)
     expect(json2.key?(:surfaces)).to be(true)
-    argh2[:io]       = json2[:io]
+    argh2[:io      ] = json2[:io      ]
     argh2[:surfaces] = json2[:surfaces]
     expect(TBD.status).to eq(0)
     expect(TBD.logs.empty?).to be(true)
@@ -9157,13 +9157,14 @@ RSpec.describe TBD_Tests do
     # The JSON output files are identical.
     expect(FileUtils.identical?(file1, file2)).to be(true)
 
+    time = Time.now
+
     # Original output UA' MD file.
     argh1[:ua_ref          ] = "code (Quebec)"
     argh1[:io][:description] = "testing equality"
     argh1[:version         ] = model.getVersion.versionIdentifier
     argh1[:seed            ] = File.join(__dir__, "files/osms/in/warehouse.osm")
-    time = Time.now
-    ua1 = TBD.ua_summary(time, argh1)
+    ua1  = TBD.ua_summary(time, argh1)
     expect(ua1.nil?).to be(false)
     expect(ua1.empty?).to be(false)
     expect(ua1.is_a?(Hash)).to be(true)
@@ -9217,7 +9218,7 @@ RSpec.describe TBD_Tests do
     expect(json3.is_a?(Hash)).to be(true)
     expect(json3.key?(:io)).to be(true)
     expect(json3.key?(:surfaces)).to be(true)
-    argh3[:io      ] = json3[:io]
+    argh3[:io      ] = json3[:io      ]
     argh3[:surfaces] = json3[:surfaces]
     expect(TBD.status).to eq(0)
     expect(TBD.logs.empty?).to be(true)
