@@ -12,7 +12,7 @@ _yardoc
 /spec/*_suite_runs/
 /spec/files/osms/out/*
 /spec/files/measures/*
-/spec/files/ua/*
+/spec/files/ua/*.md
 /json/*out.json
 
 runner.conf
