@@ -14,12 +14,12 @@ jobs:
     - name: Run Tests
       run: |
         echo $(pwd)
-        echo $(ls)
+        echo $(ls -RF)
         ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.0.0
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.0.0
         docker exec -t test pwd
-        docker exec -t test ls
+        docker exec -t test ls -RF
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
         docker kill test
@@ -31,12 +31,12 @@ jobs:
     - name: Run Tests
       run: |
         echo $(pwd)
-        echo $(ls)
+        echo $(ls -RF)
         ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.2.1
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.2.1
         docker exec -t test pwd
-        docker exec -t test ls
+        docker exec -t test ls -RF
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
         docker kill test
@@ -48,12 +48,12 @@ jobs:
     - name: Run Tests
       run: |
         echo $(pwd)
-        echo $(ls)
+        echo $(ls -RF)
         ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.3.0
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.3.0
         docker exec -t test pwd
-        docker exec -t test ls
+        docker exec -t test ls -RF
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
         docker kill test
@@ -65,12 +65,12 @@ jobs:
     - name: Run Tests
       run: |
         echo $(pwd)
-        echo $(ls)
+        echo $(ls -RF)
         ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.4.0
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.4.0
         docker exec -t test pwd
-        docker exec -t test ls
+        docker exec -t test ls -RF
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
         docker kill test
