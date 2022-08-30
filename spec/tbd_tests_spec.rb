@@ -9172,7 +9172,7 @@ RSpec.describe TBD_Tests do
     expect(ua1_md.is_a?(Array)).to be(true)
     expect(ua1_md.empty?).to be(false)
     ua1_md.each { |x| expect(x.is_a?(String)).to be(true) }
-    path1     = File.join(__dir__, "files/ua/ua1_en.md")
+    path1 = File.join(__dir__, "files/ua/ua1.md")
     File.open(path1, "w") { |f| f.puts ua1_md }
 
     # Alternate output UA' MD file.
@@ -9185,12 +9185,11 @@ RSpec.describe TBD_Tests do
     expect(ua2.empty?).to be(false)
     expect(ua2.is_a?(Hash)).to be(true)
     expect(ua2.key?(:model))
-
     ua2_md = TBD.ua_md(ua2, :en)
     expect(ua2_md.is_a?(Array)).to be(true)
     expect(ua2_md.empty?).to be(false)
     ua2_md.each { |x| expect(x.is_a?(String)).to be(true) }
-    path2 = File.join(__dir__, "files/ua/ua2_en.md")
+    path2 = File.join(__dir__, "files/ua/ua2.md")
     File.open(path2, "w") { |f| f.puts ua2_md }
 
     # Both output UA' MD files should be identical.
