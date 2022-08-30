@@ -15,6 +15,7 @@ jobs:
       run: |
         echo $(pwd)
         echo $(ls)
+        ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.0.0
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.0.0
         docker exec -t test pwd
@@ -31,6 +32,7 @@ jobs:
       run: |
         echo $(pwd)
         echo $(ls)
+        ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.2.1
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.2.1
         docker exec -t test pwd
@@ -47,6 +49,7 @@ jobs:
       run: |
         echo $(pwd)
         echo $(ls)
+        ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.3.0
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.3.0
         docker exec -t test pwd
@@ -63,6 +66,7 @@ jobs:
       run: |
         echo $(pwd)
         echo $(ls)
+        ls ${{ github.workspace }}
         docker pull nrel/openstudio:3.4.0
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.4.0
         docker exec -t test pwd
