@@ -1,4 +1,4 @@
-Gemfile.lock
+/Gemfile.lock
 /.ruby-version
 .rspec_status
 /.bundle/
@@ -10,14 +10,10 @@ _yardoc
 /rdoc
 
 /spec/*_suite_runs/
-/spec/files/osms/out/*
-# /spec/files/measures/*
-/spec/files/ua/*
+/spec/files/osms/out/*.osm
+/spec/files/measures/*/
+/spec/files/ua/*.md
 /json/*out.json
-
-/lib/measures/test_results/*
-/lib/measures/test_results
-/lib/measures/*/tests/output
 
 runner.conf
 
