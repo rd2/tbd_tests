@@ -75,7 +75,7 @@ RSpec.describe TBD_Tests do
     Parallel.each(combos, in_threads: nproc) do |combo|     # run E+ simulations
       osm   = combo[0]
       opt   = combo[1]
-      id    = "#{osm}_#{option}".gsub(".", "_")
+      id    = "#{osm}_#{opt}".gsub(".", "_")
       dir   = File.join(runs, id)
       next if File.exist?(dir) && File.exist?(File.join(dir, "out.osw"))
       FileUtils.mkdir_p(dir)
