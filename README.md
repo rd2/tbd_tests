@@ -12,12 +12,11 @@ With each new TBD feature, a decision is made whether to host new RSpec tests he
 
 The instructions in this section are for those wanting to explore/tweak a cloned/forked version of these tests. We suggest following the same, original OpenStudio installation instructions described [here](https://github.com/rd2/tbd/blob/master/README.md#development).
 
-## Complete list of test commands
+## Test commands
 
 Run the following (basic) tests in the root repository:
 ```
 bundle update (or 'bundle install')
-bundle exec rake libraries
 bundle exec rake
 ```
 
