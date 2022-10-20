@@ -6379,7 +6379,7 @@ RSpec.describe TBD_Tests do
     layer = c.getLayer(0).to_StandardOpaqueMaterial
     expect(layer.empty?).to be(false)
     layer = layer.get
-    expect(layer.name.get).to eq("'Office Left Wall' m tbd")
+    expect(layer.name.get).to eq("Office Left Wall m tbd")
     #expect(layer.thermalResistance).to be_within(0.001).of(0.001)
     expect(layer.thermalConductivity).to be_within(0.1).of(3.0)
     expect(layer.thickness).to be_within(0.001).of(0.003)
@@ -8038,7 +8038,7 @@ RSpec.describe TBD_Tests do
     layer0 = bulk_construction.layers[0]
     layer1 = bulk_construction.layers[1]
     layer2 = bulk_construction.layers[2]
-    expect(layer1.nameString).to eq("'#{bulk}' m tbd")             # not uprated
+    expect(layer1.nameString).to eq("#{bulk} m tbd")             # not uprated
 
     layer = layer0.to_StandardOpaqueMaterial
     expect(layer.empty?).to be(false)
@@ -8368,7 +8368,7 @@ RSpec.describe TBD_Tests do
     layer0 = bulk_construction.layers[0]
     layer1 = bulk_construction.layers[1]
     layer2 = bulk_construction.layers[2]
-    expect(layer1.nameString).to eq("'#{bulk}' m tbd")             # not uprated
+    expect(layer1.nameString).to eq("#{bulk} m tbd")             # not uprated
 
     layer = layer0.to_StandardOpaqueMaterial
     expect(layer.empty?).to be(false)
