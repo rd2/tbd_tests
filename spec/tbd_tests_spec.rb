@@ -2594,19 +2594,18 @@ RSpec.describe TBD_Tests do
     translator = OpenStudio::OSVersion::VersionTranslator.new
     file = File.join(__dir__, "files/osms/in/midrise_KIVA.osm")
     path = OpenStudio::Path.new(file)
-    os_model = translator.loadModel(path)
-    expect(os_model.empty?).to be(false)
-    os_model = os_model.get
+    model = translator.loadModel(path)
+    expect(model.empty?).to be(false)
+    model = model.get
 
-
-    # Testing min/max cooling/heating setpoints
-    setpoints = TBD.heatingTemperatureSetpoints?(os_model)
-    setpoints = TBD.coolingTemperatureSetpoints?(os_model) || setpoints
+    # Testing min/max cooling/heating setpoints.
+    setpoints = TBD.heatingTemperatureSetpoints?(model)
+    setpoints = TBD.coolingTemperatureSetpoints?(model) || setpoints
     expect(setpoints).to be(true)
-    airloops = TBD.airLoopsHVAC?(os_model)
+    airloops = TBD.airLoopsHVAC?(model)
     expect(airloops).to be(true)
 
-    os_model.getSpaces.each do |space|
+    model.getSpaces.each do |space|
       expect(space.thermalZone.empty?).to be(false)
       zone = space.thermalZone.get
       heat_spt = TBD.maxHeatScheduledSetpoint(zone)
@@ -2616,6 +2615,7 @@ RSpec.describe TBD_Tests do
       heating = heat_spt[:spt]
       cooling = cool_spt[:spt]
       expect(TBD.plenum?(space, airloops, setpoints)).to be(false)
+
       if zone.nameString == "Office ZN"
         expect(heating).to be_within(0.1).of(21.1)
         expect(cooling).to be_within(0.1).of(23.9)
@@ -2625,10 +2625,10 @@ RSpec.describe TBD_Tests do
       end
     end
 
-    argh[:option] = "(non thermal bridging)"                        # overridden
-    argh[:io_path] = File.join(__dir__, "../json/midrise.json")
+    argh[:option     ] = "(non thermal bridging)"                   # overridden
+    argh[:io_path    ] = File.join(__dir__, "../json/midrise.json")
     argh[:schema_path] = File.join(__dir__, "../tbd.schema.json")
-    json = TBD.process(os_model, argh)
+    json = TBD.process(model, argh)
     expect(json.is_a?(Hash)).to be(true)
     expect(json.key?(:io)).to be(true)
     expect(json.key?(:surfaces)).to be(true)
@@ -2646,8 +2646,25 @@ RSpec.describe TBD_Tests do
     surfaces.each do |id, surface|
       expect(surface.key?(:conditioned)).to be(true)
       next unless surface[:conditioned]
+
       expect(surface.key?(:heating)).to be(true)
       expect(surface.key?(:cooling)).to be(true)
+    end
+
+    # A side test. Validating that TBD doesn't tag shared edge between exterior
+    # wall and interior ceiling (adiabatic conditions) as 'party' for
+    # 'multiplied' mid-level spaces. In fact, there shouldn't be a single
+    # instance of a 'party' edge in the TBD model.
+    surfaces.each do |id, surface|
+      # next unless id.include?("m ")
+      # next unless id.include?("Wall ")
+      next unless surface.key?(:ratio)
+      expect(surface.key?(:edges)).to be(true)
+
+      surface[:edges].values.each do |edge|
+        expect(edge.key?(:type)).to be(true)
+        expect(edge[:type]).to_not eq(:party)
+      end
     end
 
     st1 = "Building Story 1"
@@ -2656,6 +2673,7 @@ RSpec.describe TBD_Tests do
 
     expect(io.key?(:stories)).to be(true)
     expect(io[:stories].size).to eq(3)
+
     io[:stories].each do |story|
       expect(story.key?(:id)).to be(true)
       expect(story[:id]).to eq(st1).or eq(st2).or eq(st3)
@@ -2663,6 +2681,7 @@ RSpec.describe TBD_Tests do
     end
 
     counter = 0
+
     surfaces.each do |id, surface|
       next unless surface.key?(:ratio)
       expect(surface.key?(:boundary)).to be(true)
@@ -4708,37 +4727,42 @@ RSpec.describe TBD_Tests do
     argh = {}
 
     translator = OpenStudio::OSVersion::VersionTranslator.new
-    file = File.join(__dir__, "files/osms/in/seb.osm")
-    path = OpenStudio::Path.new(file)
-    os_model = translator.loadModel(path)
-    expect(os_model.empty?).to be(false)
-    os_model = os_model.get
+    file  = File.join(__dir__, "files/osms/in/seb.osm")
+    path  = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model.empty?).to be(false)
+    model = model.get
 
-    # Reset boundary conditions for open area wall 5 (and plenum wall above).
+    # Generate a new SurfacePropertyOtherSideCoefficients object.
+    other = OpenStudio::Model::SurfacePropertyOtherSideCoefficients.new(model)
+    other.setName("other_side_coefficients")
+    expect(other.setZoneAirTemperatureCoefficient(1)).to be(true)
+
+    # Reset outside boundary conditions for "open area wall 5" (and plenum wall
+    # above) by assigning an "OtherSideCoefficients" object (no longer relying
+    # on "Adiabatic" string).
     id1 = "Openarea 1 Wall 5"
-    s1 = os_model.getSurfaceByName(id1)
+    s1  = model.getSurfaceByName(id1)
     expect(s1.empty?).to be(false)
-    s1 = s1.get
-    s1.setOutsideBoundaryCondition("Adiabatic")
-    expect(s1.nameString).to eq(id1)
-    expect(s1.outsideBoundaryCondition).to eq("Adiabatic")
+    s1  = s1.get
+    expect(s1.setSurfacePropertyOtherSideCoefficients(other)).to be(true)
+    expect(s1.outsideBoundaryCondition).to eq("OtherSideCoefficients")
 
     id2 = "Level0 Open area 1 Ceiling Plenum AbvClgPlnmWall 5"
-    s2 = os_model.getSurfaceByName(id2)
+    s2  = model.getSurfaceByName(id2)
     expect(s2.empty?).to be(false)
-    s2 = s2.get
-    s2.setOutsideBoundaryCondition("Adiabatic")
-    expect(s2.nameString).to eq(id2)
-    expect(s2.outsideBoundaryCondition).to eq("Adiabatic")
+    s2  = s2.get
+    expect(s2.setSurfacePropertyOtherSideCoefficients(other)).to be(true)
+    expect(s2.outsideBoundaryCondition).to eq("OtherSideCoefficients")
 
-    argh[:option] = "compliant"
-    argh[:io_path] = File.join(__dir__, "../json/tbd_seb_n8.json")
+    argh[:option     ] = "compliant"
+    argh[:io_path    ] = File.join(__dir__, "../json/tbd_seb_n8.json")
     argh[:schema_path] = File.join(__dir__, "../tbd.schema.json")
-    json = TBD.process(os_model, argh)
+    json = TBD.process(model, argh)
     expect(json.is_a?(Hash)).to be(true)
     expect(json.key?(:io)).to be(true)
     expect(json.key?(:surfaces)).to be(true)
-    io       = json[:io]
+    io       = json[:io      ]
     surfaces = json[:surfaces]
     expect(TBD.status).to eq(0)
     expect(TBD.logs.empty?).to be(true)
@@ -4778,7 +4802,7 @@ RSpec.describe TBD_Tests do
       expect(surface.key?(:ratio)).to be(true)
       h = surface[:heatloss]
 
-      s = os_model.getSurfaceByName(id)
+      s = model.getSurfaceByName(id)
       expect(s.empty?).to be(false)
       s = s.get
       expect(s.nameString).to eq(id)
