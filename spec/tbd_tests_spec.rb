@@ -10610,4 +10610,121 @@ RSpec.describe TBD_Tests do
     expect(message.include?("< 0.01m (TBD::validate)")).to be(true)
     TBD.clean!
   end
+
+  it "checks for Frame & Divider reveals" do
+    # To define an outside reveal (e.g. 100mm offset of a window from the brick
+    # cladding of its base/parent/host wall), EnergyPlus subsurface vertices
+    # must be offset, by e.g. 100mm, from the host surface. However, OpenStudio
+    # allows users to maintain co-planar surface definitions (e.g. window and
+    # wall vertices along same 3D plane), and automates e.g. a 100mm .idf offset
+    # via Frame & Divider reveal options. As such, TBD/Topolys can safely
+    # process the OpenStudio subsurface vertices to identify head, sill and jamb
+    # thermal bridges. There are no changes brought to TBD source code - this
+    # test simply validates that with/without Frame & Divider reveals, TBD is
+    # able to process OpenStudio models indifferently.
+    TBD.clean!
+    argh = {}
+    translator = OpenStudio::OSVersion::VersionTranslator.new
+    file = File.join(__dir__, "files/osms/in/smalloffice.osm")
+    path = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model.empty?).to be(false)
+    model = model.get
+
+    # 1. Run with an unaltered model.
+    argh[:option     ] = "code (Quebec)"
+    argh[:schema_path] = File.join(__dir__, "../tbd.schema.json")
+
+    json = TBD.process(model, argh)
+    expect(json.is_a?(Hash)).to be(true)
+    expect(json.key?(:io      )).to be(true)
+    expect(json.key?(:surfaces)).to be(true)
+
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+
+    expect(TBD.status).to eq(0)
+    expect(TBD.logs.empty?).to be(true)
+    expect(io.nil?).to be(false)
+    expect(io.is_a?(Hash)).to be(true)
+    expect(io.empty?).to be(false)
+    expect(surfaces.nil?).to be(false)
+    expect(surfaces.is_a?(Hash)).to be(true)
+    expect(surfaces.size).to eq(43)
+
+    expect(surfaces.key?("Perimeter_ZN_1_wall_south")).to be(true)
+    surface = surfaces["Perimeter_ZN_1_wall_south"]
+    expect(surface.key?(:ratio   )).to be(true)
+    expect(surface.key?(:heatloss)).to be(true)
+    expect(surface[:ratio   ]).to be_within(TOL).of(-10.88)
+    expect(surface[:heatloss]).to be_within(TOL).of( 23.40)
+
+    # Mimic the export functionality of the measure and save .osm file.
+    out1 = JSON.pretty_generate(io)
+    file1 = File.join(__dir__, "../json/tbd_smalloffice3.out.json")
+    File.open(file1, "w") { |f| f.puts out1 }
+    pth = File.join(__dir__, "files/osms/out/model_FD.osm")
+    model.save(pth, true)
+
+    # 2. Repeat, yet add Frame & Divider with outside reveal to 1x window.
+    TBD.clean!
+    argh = {}
+    file = File.join(__dir__, "files/osms/in/smalloffice.osm")
+    path = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model.empty?).to be(false)
+    model = model.get
+
+    # Fetch window & add 100mm outside reveal depth to F&D.
+    sub = model.getSubSurfaceByName("Perimeter_ZN_1_wall_south_Window_1")
+    expect(sub.empty?).to be(false)
+    sub = sub.get
+    fd = OpenStudio::Model::WindowPropertyFrameAndDivider.new(model)
+    fd.setName("Perimeter_ZN_1_wall_south_Window_1_fd")
+    expect(fd.setOutsideRevealDepth(0.100)).to be(true)
+    expect(fd.isOutsideRevealDepthDefaulted).to be(false)
+    expect(fd.outsideRevealDepth).to be_within(TOL).of(0.100)
+    expect(sub.setWindowPropertyFrameAndDivider(fd)).to be(true)
+
+    argh[:option     ] = "code (Quebec)"
+    argh[:schema_path] = File.join(__dir__, "../tbd.schema.json")
+
+    json = TBD.process(model, argh)
+    expect(json.is_a?(Hash)).to be(true)
+    expect(json.key?(:io      )).to be(true)
+    expect(json.key?(:surfaces)).to be(true)
+
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+
+    expect(TBD.status).to eq(0)
+    expect(TBD.logs.empty?).to be(true)
+    expect(io.nil?).to be(false)
+    expect(io.is_a?(Hash)).to be(true)
+    expect(io.empty?).to be(false)
+    expect(surfaces.nil?).to be(false)
+    expect(surfaces.is_a?(Hash)).to be(true)
+    expect(surfaces.size).to eq(43)
+
+    expect(surfaces.key?("Perimeter_ZN_1_wall_south")).to be(true)
+    surface = surfaces["Perimeter_ZN_1_wall_south"]
+    expect(surface.key?(:ratio   )).to be(true)
+    expect(surface.key?(:heatloss)).to be(true)
+    expect(surface[:ratio   ]).to be_within(TOL).of(-10.88)
+    expect(surface[:heatloss]).to be_within(TOL).of( 23.40)
+
+    # Mimic the export functionality of the measure and save .osm file.
+    out2 = JSON.pretty_generate(io)
+    file2 = File.join(__dir__, "../json/tbd_smalloffice4.out.json")
+    File.open(file2, "w") { |f| f.puts out2 }
+    pth = File.join(__dir__, "files/osms/out/model_FD_rvl.osm")
+    model.save(pth, true)
+
+    # Both wall and window are defined along the XZ plane. Comparing generated
+    # .idf files, the Y-axis coordinates of the window with a Frame & Divider
+    # reveal is indeed offset by 100mm vs its host wall vertices. Comparing
+    # EnergyPlus results, host walls in both .idf files have the same derated
+    # U-factors, and reference the same derated construction and material.
+    expect(FileUtils.identical?(file1, file2)).to be(true)
+  end
 end
