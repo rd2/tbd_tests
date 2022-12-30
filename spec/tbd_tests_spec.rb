@@ -2043,7 +2043,7 @@ RSpec.describe TBD_Tests do
       expect(io[:edges].size).to eq(300)
     end
   end
-
+  
   it "can process DOE Prototype warehouse.osm" do
     TBD.clean!
     argh = {}
