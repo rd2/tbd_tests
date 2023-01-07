@@ -25,6 +25,7 @@ RSpec.describe TBD_Tests do
   it "it can run all the measure tests" do
     measure_dir = File.join(__dir__, "../lib/measures") # there's no lib/measures directory, so this doesn't do anything right now
     measure_tests = Dir.glob(measure_dir + "/*/tests/*.rb")
+    
     measure_tests.each do |measure_test|
       command = "#{OpenStudio::getOpenStudioCLI} #{measure_test}"
       stdout_str, stderr_str, status = Open3.capture3(get_clean_env, command)
