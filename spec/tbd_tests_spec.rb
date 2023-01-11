@@ -11240,6 +11240,7 @@ RSpec.describe TBD_Tests do
     expect(json.key?(:surfaces))
     io       = json[:io      ]
     surfaces = json[:surfaces]
+    expect(io.key?(:edges))
     expect(TBD.status).to eq(0)
     expect(TBD.logs.empty?)
 
