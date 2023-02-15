@@ -1521,6 +1521,7 @@ RSpec.describe TBD_Tests do
     os_model.getSurfaces.each do |s|
       next unless s.surfaceType == "RoofCeiling"
       next unless s.isConstructionDefaulted
+
       c = s.construction
       expect(c.empty?).to be(false)
       c = c.get.to_LayeredConstruction
@@ -1539,6 +1540,7 @@ RSpec.describe TBD_Tests do
     os_model.getSurfaces.each do |s|
       next unless s.surfaceType == "Wall"
       next unless s.outsideBoundaryCondition == "Outdoors"
+
       id = s.construction.get.nameString
       str = "Typical Insulated Wood Framed Exterior Wall R-11.24"
       expect(id.include?(str)).to be(true)
@@ -1585,6 +1587,7 @@ RSpec.describe TBD_Tests do
     surfaces.each do |id, surface|
       expect(surface.key?(:conditioned)).to be(true)
       next unless surface[:conditioned]
+
       expect(surface.key?(:heating)).to be(true)
       expect(surface.key?(:cooling)).to be(true)
 
@@ -1629,6 +1632,7 @@ RSpec.describe TBD_Tests do
       end
 
       next if id == "Attic_floor_core"
+
       expect(surfaces[b].key?(:heatloss)).to be(true)
       expect(surfaces[b].key?(:ratio)).to be(true)
       h = surfaces[b][:heatloss]
@@ -1679,6 +1683,7 @@ RSpec.describe TBD_Tests do
 
     surfaces.each do |id, surface|
       next unless surface.key?(:edges)
+
       expect(surface.key?(:heatloss)).to be(true)
 
       if id == "Core_ZN_ceiling"
@@ -1701,6 +1706,7 @@ RSpec.describe TBD_Tests do
 
       # Testing outdoor-facing walls.
       next unless s.surfaceType == "Wall"
+
       expect(h).to be_within(0.01).of(51.17) if id.include?("_1_") # South
       expect(h).to be_within(0.01).of(33.08) if id.include?("_2_") # East
       expect(h).to be_within(0.01).of(48.32) if id.include?("_3_") # North
@@ -1715,6 +1721,7 @@ RSpec.describe TBD_Tests do
       expect(c.layers[2].nameString.include?("m tbd")).to be(true)
 
       next unless id.include?("_1_") # South
+      
       l_fenestration = 0
       l_head         = 0
       l_sill         = 0
