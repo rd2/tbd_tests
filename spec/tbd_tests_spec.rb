@@ -1721,7 +1721,7 @@ RSpec.describe TBD_Tests do
       expect(c.layers[2].nameString.include?("m tbd")).to be(true)
 
       next unless id.include?("_1_") # South
-      
+
       l_fenestration = 0
       l_head         = 0
       l_sill         = 0
@@ -8213,8 +8213,10 @@ RSpec.describe TBD_Tests do
       expect(layer.thermalResistance).to be_within(TOL).of(1.33) # m2.K/W (R7.6)
     end
 
-    # Set w1 as Bulk Storage Roof construction, which triggers a TBD error when
-    # uprating: safeguard limiting uprated constructions to single surface type.
+    # Set w1 (a wall construction) as the 'Bulk Storage Roof' construction. This
+    # triggers a TBD warning when uprating: a safeguard limiting uprated
+    # constructions to single surface type (e.g. can't be referenced by both
+    # roof AND wall surfaces).
     bulk = "Bulk Storage Roof"
     bulk_roof = os_model.getSurfaceByName(bulk)
     expect(bulk_roof.empty?).to be(false)
@@ -8241,9 +8243,9 @@ RSpec.describe TBD_Tests do
     expect(json.key?(:surfaces)).to be(true)
     io       = json[:io]
     surfaces = json[:surfaces]
-    expect(TBD.status).to eq(ERR)
+    expect(TBD.status).to eq(WRN)
     expect(TBD.logs.size).to eq(1)
-    msg = "Uprating wall, not '#{bulk}' (TBD::uprate)"
+    msg = "Cloning '#{bulk}' construction - not '#{w1}' (TBD::uprate)"
     expect(TBD.logs.first[:message]).to eq(msg)
     expect(io.nil?).to be(false)
     expect(io.is_a?(Hash)).to be(true)
@@ -8543,8 +8545,10 @@ RSpec.describe TBD_Tests do
       expect(layer.thermalResistance).to be_within(TOL).of(1.33) # m2.K/W (R7.6)
     end
 
-    # Set w1 as Bulk Storage Roof construction, which triggers a TBD error when
-    # uprating: safeguard limiting uprated constructions to single surface type.
+    # Set w1 (a wall construction) as the 'Bulk Storage Roof' construction. This
+    # triggers a TBD warning when uprating: a safeguard limiting uprated
+    # constructions to single surface type (e.g. can't be referenced by both
+    # roof AND wall surfaces).
     bulk = "Bulk Storage Roof"
     bulk_roof = os_model.getSurfaceByName(bulk)
     expect(bulk_roof.empty?).to be(false)
@@ -8571,9 +8575,9 @@ RSpec.describe TBD_Tests do
     expect(json.key?(:surfaces)).to be(true)
     io       = json[:io]
     surfaces = json[:surfaces]
-    expect(TBD.status).to eq(ERR)
+    expect(TBD.status).to eq(WRN)
     expect(TBD.logs.size).to eq(1)
-    msg = "Uprating wall, not '#{bulk}' (TBD::uprate)"
+    msg = "Cloning '#{bulk}' construction - not '#{w1}' (TBD::uprate)"
     expect(TBD.logs.first[:message]).to eq(msg)
     expect(io.nil?).to be(false)
     expect(io.is_a?(Hash)).to be(true)
