@@ -5173,7 +5173,7 @@ RSpec.describe TBD_Tests do
     expect(vals[:sillconvex]).to  be_within(0.001).of(0.391)     # :fenestration
   end
 
-  it "can flag polygon 'fits?' & 'overlaps?' (frame & dividers)" do
+  it "can flag polygon 'fits?' & 'overlaps?'" do
     model = OpenStudio::Model::Model.new
 
     # 10m x 10m parent vertical (wall) surface.
