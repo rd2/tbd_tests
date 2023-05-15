@@ -5294,7 +5294,6 @@ RSpec.describe TBD_Tests do
 
     OpenStudio::Model::SubSurface.validSubSurfaceTypeValues.each do |type|
       expect(sub.setSubSurfaceType(type)).to be(true)
-      # puts sub.subSurfaceType
       # FixedWindow
       # OperableWindow
       # Door
