@@ -57,23 +57,23 @@ RSpec.describe TBD_Tests do
     # types << "SmallHotel"
     # types << "LargeHotel"
     # types << "Warehouse"
-    types << "RetailStandalone"
+    # types << "RetailStandalone"
     # types << "RetailStripmall"
     # types << "QuickServiceRestaurant"
-    # types << "FullServiceRestaurant"
-    # types << "MidriseApartment"
-    # types << "HighriseApartment"
-    # types << "Hospital"
-    # types << "Outpatient"
+    types << "FullServiceRestaurant"
+    types << "MidriseApartment"
+    types << "HighriseApartment"
+    types << "Hospital"
+    types << "Outpatient"
 
     opts << "skip"
-    opts << "poor (BETBG)"
-    opts << "regular (BETBG)"
-    opts << "efficient (BETBG)"
+    # opts << "poor (BETBG)"
+    # opts << "regular (BETBG)"
+    # opts << "efficient (BETBG)"
     # opts << "spandrel (BETBG)"
     # opts << "spandrel HP (BETBG)"
-    # opts << "code (Quebec)"
-    # opts << "uncompliant (Quebec)"
+    opts << "code (Quebec)"
+    opts << "uncompliant (Quebec)"
     opts << "(non thermal bridging)"
 
     types.each do |type|
@@ -97,7 +97,7 @@ RSpec.describe TBD_Tests do
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
       command = "'#{OpenStudio::getOpenStudioCLI}' run -w '#{file}'"
-      puts "... running CASE #{osm} | #{opt}"
+      puts "... running CASE #{type} | #{opt}"
       stdout, stderr, status = Open3.capture3(clean, command)
     end
 
@@ -121,7 +121,7 @@ RSpec.describe TBD_Tests do
         res  = results[opt][:steps][1][:result]
         os   = results[opt][:steps][2][:result]
         gj   = os[:step_values].select{ |v| v[:name] == "total_site_energy" }
-        puts " ------       CASE  : #{osm}"
+        puts " ------       CASE  : #{type}"
         puts "        TBD option  : #{opt}"
         puts "        TBD success = #{res[:step_result]}"
         puts "         OS success = #{os[:step_result]}"
