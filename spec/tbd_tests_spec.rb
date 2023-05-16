@@ -5173,7 +5173,7 @@ RSpec.describe TBD_Tests do
     expect(vals[:sillconvex]).to  be_within(0.001).of(0.391)     # :fenestration
   end
 
-  it "can flag polygon 'fits?' & 'overlaps?' (frame & dividers)" do
+  it "can flag polygon 'fits?' & 'overlaps?'" do
     model = OpenStudio::Model::Model.new
 
     # 10m x 10m parent vertical (wall) surface.
@@ -5294,7 +5294,6 @@ RSpec.describe TBD_Tests do
 
     OpenStudio::Model::SubSurface.validSubSurfaceTypeValues.each do |type|
       expect(sub.setSubSurfaceType(type)).to be(true)
-      # puts sub.subSurfaceType
       # FixedWindow
       # OperableWindow
       # Door
@@ -10763,16 +10762,16 @@ RSpec.describe TBD_Tests do
     #   27.69, 0, 3.04,                         !- X,Y,Z Vertex 3 {m}
     #   27.69, 0, 3.05;                         !- X,Y,Z Vertex 4 {m}
 
-    # Calling TBD's 'validate' method in isolation.
-    expect(TBD.validate(sliver)).to be(false)
+    # Calling OSut's 'surface_valid?' method in isolation.
+    expect(TBD.surface_valid?(sliver)).to be(false)
     expect(TBD.status).to eq(ERR)
     expect(TBD.logs.empty?).to be(false)
     expect(TBD.logs.size).to eq(1)
     message = TBD.logs.first[:message]
-    expect(message.include?("< 0.01m (TBD::validate)")).to be(true)
+    expect(message.include?("< 0.01m (OSut::surface_valid?)")).to be(true)
     TBD.clean!
 
-    expect(TBD.validate(original)).to be(true)
+    expect(TBD.surface_valid?(original)).to be(true)
     expect(TBD.status.zero?).to be(true)
     expect(TBD.logs.empty?).to be(true)
     TBD.clean!
@@ -10788,7 +10787,7 @@ RSpec.describe TBD_Tests do
     expect(TBD.logs.empty?).to be(false)
     expect(TBD.logs.size).to eq(1)
     message = TBD.logs.first[:message]
-    expect(message.include?("< 0.01m (TBD::validate)")).to be(true)
+    expect(message.include?("< 0.01m (OSut::surface_valid?)")).to be(true)
     expect(io.nil?).to be(false)
     expect(io.is_a?(Hash)).to be(true)
     expect(io.empty?).to be(false)
@@ -10852,12 +10851,12 @@ RSpec.describe TBD_Tests do
     #   14.76, 0, 0,                            !- X,Y,Z Vertex 3 {m}
     #   14.76, 0, 2.134;                        !- X,Y,Z Vertex 4 {m}
 
-    expect(TBD.validate(door)).to be(false)
+    expect(TBD.surface_valid?(door)).to be(false)
     expect(TBD.status).to eq(ERR)
     expect(TBD.logs.empty?).to be(false)
     expect(TBD.logs.size).to eq(1)
     message = TBD.logs.first[:message]
-    expect(message.include?("< 0.01m (TBD::validate)")).to be(true)
+    expect(message.include?("< 0.01m (OSut::surface_valid?)")).to be(true)
     TBD.clean!
   end
 

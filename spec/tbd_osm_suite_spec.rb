@@ -49,7 +49,7 @@ RSpec.describe TBD_Tests do
     combos = []
 
     osms << "seb.osm"
-    # osms << "secondaryschool.osm"
+    osms << "secondaryschool.osm"
     osms << "smalloffice.osm"
     osms << "warehouse.osm"
 
@@ -62,8 +62,8 @@ RSpec.describe TBD_Tests do
     # opts << "poor (BETBG)"
     # opts << "regular (BETBG)"
     # opts << "efficient (BETBG)"
-    opts << "spandrel (BETBG)"
-    opts << "spandrel HP (BETBG)"
+    # opts << "spandrel (BETBG)"
+    # opts << "spandrel HP (BETBG)"
     opts << "code (Quebec)"
     opts << "uncompliant (Quebec)"
     opts << "(non thermal bridging)"
