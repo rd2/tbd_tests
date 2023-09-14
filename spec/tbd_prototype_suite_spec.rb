@@ -29,21 +29,21 @@ RSpec.describe TBD_Tests do
     osw_ = File.join(__dir__, "files/osws/prototype_suite.osw"              )
     runs = File.join(__dir__, "prototype_suite_runs"                        )
 
-    expect( Dir.exist?(tbd_)).to be(true)
-    expect( Dir.exist?(res_)).to be(true)
-    expect( Dir.exist?(pro_)).to be(true)
-    expect(File.exist?(osw_)).to be(true)
+    expect( Dir.exist?(tbd_)).to be true
+    expect( Dir.exist?(res_)).to be true
+    expect( Dir.exist?(pro_)).to be true
+    expect(File.exist?(osw_)).to be true
 
     FileUtils.mkdir_p(runs)
-    nproc    = [1, Parallel.processor_count - 2].max      # nb processors to use
+    nproc    = [1, Parallel.processor_count - 2].max # nb processors to use
     template = nil
 
     File.open(osw_, "r") do |f|
       template = JSON.parse(f.read, { symbolize_names: true })
     end
 
-    expect(template.nil?  ).to be(false)
-    expect(template.empty?).to be(false)
+    expect(template).to_not be_nil
+    expect(template).to_not be_empty
 
     types  = []
     opts   = []
@@ -80,7 +80,7 @@ RSpec.describe TBD_Tests do
       opts.each { |opt| combos << [type, opt] }
     end
 
-    Parallel.each(combos, in_threads: nproc) do |combo|     # run E+ simulations
+    Parallel.each(combos, in_threads: nproc) do |combo| # run E+ simulations
       type  = combo[0]
       opt   = combo[1]
       id    = "#{type}_#{opt}"
@@ -88,11 +88,11 @@ RSpec.describe TBD_Tests do
       next if File.exist?(dir) && File.exist?(File.join(dir, "out.osw"))
 
       FileUtils.mkdir_p(dir)
-      osw   = Marshal.load( Marshal.dump(template) )
+      osw = Marshal.load( Marshal.dump(template) )
 
       osw[:steps][0][:arguments][:building_type] = type
-      osw[:steps][1][:arguments][:__SKIP__     ] = true         if opt == "skip"
-      osw[:steps][1][:arguments][:option       ] = opt      unless opt == "skip"
+      osw[:steps][1][:arguments][:__SKIP__     ] = true    if opt == "skip"
+      osw[:steps][1][:arguments][:option       ] = opt unless opt == "skip"
 
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
@@ -103,12 +103,13 @@ RSpec.describe TBD_Tests do
 
     puts
 
-    types.each do |type|                 # fetch & compare E+ simulation results
+    types.each do |type| # fetch & compare E+ simulation results
       results = {}
 
       opts.each do |opt|
-        id           = "#{type}_#{opt}"
-        file         = File.join(runs, id, "out.osw")
+        id   = "#{type}_#{opt}"
+        file = File.join(runs, id, "out.osw")
+        
         results[opt] = {}
 
         File.open(file, "r") do |f|

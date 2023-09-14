@@ -41,14 +41,14 @@ require "tbd_tests/version"
 module TBD_Tests
   extend TBD
 
-  TOL  = TBD::TOL
-  TOL2 = TBD::TOL2
-  DBG  = TBD::DEBUG  #   mainly to flag invalid arguments for devs (buggy code)
-  INF  = TBD::INFO   #           informs TBD user of measure success or failure
-  WRN  = TBD::WARN   # e.g. WARN users of 'iffy' .osm inputs (yet not critical)
-  ERR  = TBD::ERR    #                            e.g. flag invalid .osm inputs
-  FTL  = TBD::FATAL  #                     e.g. invalid TBD JSON format/entries
-  NS   = "nameString" #                   OpenStudio IdfObject nameString method
+  TOL  = TBD::TOL     # default distance tolerance (m)
+  TOL2 = TBD::TOL2    # default area tolerance (m2)
+  DBG  = TBD::DEBUG   # github.com/rd2/oslg
+  INF  = TBD::INFO    # github.com/rd2/oslg
+  WRN  = TBD::WARN    # github.com/rd2/oslg
+  ERR  = TBD::ERR     # github.com/rd2/oslg
+  FTL  = TBD::FATAL   # github.com/rd2/oslg
+  NS   = "nameString" # OpenStudio IdfObject nameString method
 
   extend TBD
 end

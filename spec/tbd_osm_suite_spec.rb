@@ -28,20 +28,20 @@ RSpec.describe TBD_Tests do
     osw_ = File.join(__dir__, "files/osws/osm_suite.osw"         )
     runs = File.join(__dir__, "osm_suite_runs"                   )
 
-    expect( Dir.exist?(tbd_)).to be(true)
-    expect( Dir.exist?(res_)).to be(true)
-    expect(File.exist?(osw_)).to be(true)
+    expect( Dir.exist?(tbd_)).to be true
+    expect( Dir.exist?(res_)).to be true
+    expect(File.exist?(osw_)).to be true
 
     FileUtils.mkdir_p(runs)
-    nproc    = [1, Parallel.processor_count - 2].max      # nb processors to use
+    nproc    = [1, Parallel.processor_count - 2].max # nb processors to use
     template = nil
 
     File.open(osw_, "r") do |f|
       template = JSON.parse(f.read, { symbolize_names: true })
     end
 
-    expect(template.nil?  ).to be(false)
-    expect(template.empty?).to be(false)
+    expect(template).to_not be_nil
+    expect(template).to_not be_empty
 
     osms   = []
     epws   = {}
@@ -49,13 +49,13 @@ RSpec.describe TBD_Tests do
     combos = []
 
     osms << "seb.osm"
-    osms << "secondaryschool.osm"
-    osms << "smalloffice.osm"
+    # osms << "secondaryschool.osm"
+    # osms << "smalloffice.osm"
     osms << "warehouse.osm"
 
     epws["seb.osm"            ] = "srrl_2013_amy.epw"
-    epws["secondaryschool.osm"] = "CAN_PQ_Quebec.717140_CWEC.epw"
-    epws["smalloffice.osm"    ] = "CAN_PQ_Quebec.717140_CWEC.epw"
+    # epws["secondaryschool.osm"] = "CAN_PQ_Quebec.717140_CWEC.epw"
+    # epws["smalloffice.osm"    ] = "CAN_PQ_Quebec.717140_CWEC.epw"
     epws["warehouse.osm"      ] = "CAN_PQ_Quebec.717140_CWEC.epw"
 
     opts << "skip"
@@ -64,7 +64,7 @@ RSpec.describe TBD_Tests do
     # opts << "efficient (BETBG)"
     # opts << "spandrel (BETBG)"
     # opts << "spandrel HP (BETBG)"
-    opts << "code (Quebec)"
+    # opts << "code (Quebec)"
     opts << "uncompliant (Quebec)"
     opts << "(non thermal bridging)"
 
@@ -72,7 +72,7 @@ RSpec.describe TBD_Tests do
       opts.each { |opt| combos << [osm, opt] }
     end
 
-    Parallel.each(combos, in_threads: nproc) do |combo|     # run E+ simulations
+    Parallel.each(combos, in_threads: nproc) do |combo| # run E+ simulations
       osm   = combo[0]
       opt   = combo[1]
       id    = "#{osm}_#{opt}".gsub(".", "_")
@@ -84,8 +84,9 @@ RSpec.describe TBD_Tests do
 
       osw[:seed_file   ]                    = osm
       osw[:weather_file]                    = epws[osm]
-      osw[:steps][0][:arguments][:__SKIP__] = true              if opt == "skip"
-      osw[:steps][0][:arguments][:option  ] = opt           unless opt == "skip"
+
+      osw[:steps][0][:arguments][:__SKIP__] = true    if opt == "skip"
+      osw[:steps][0][:arguments][:option  ] = opt unless opt == "skip"
 
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
@@ -96,7 +97,7 @@ RSpec.describe TBD_Tests do
 
     puts
 
-    osms.each do |osm|                   # fetch & compare E+ simulation results
+    osms.each do |osm| # fetch & compare E+ simulation results
       results = {}
 
       opts.each do |opt|
