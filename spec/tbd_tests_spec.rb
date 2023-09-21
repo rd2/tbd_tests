@@ -954,16 +954,18 @@ RSpec.describe TBD_Tests do
         next unless deratables.include?(id)
 
         # Evaluate current set content before processing a new linked surface.
-        is            = {}
-        is[:head    ] = set.keys.to_s.include?("head")
-        is[:sill    ] = set.keys.to_s.include?("sill")
-        is[:jamb    ] = set.keys.to_s.include?("jamb")
-        is[:corner  ] = set.keys.to_s.include?("corner")
-        is[:parapet ] = set.keys.to_s.include?("parapet")
-        is[:party   ] = set.keys.to_s.include?("party")
-        is[:grade   ] = set.keys.to_s.include?("grade")
-        is[:balcony ] = set.keys.to_s.include?("balcony")
-        is[:rimjoist] = set.keys.to_s.include?("rimjoist")
+        is               = {}
+        is[:head       ] = set.keys.to_s.include?("head")
+        is[:sill       ] = set.keys.to_s.include?("sill")
+        is[:jamb       ] = set.keys.to_s.include?("jamb")
+        is[:corner     ] = set.keys.to_s.include?("corner")
+        is[:parapet    ] = set.keys.to_s.include?("parapet")
+        is[:roof       ] = set.keys.to_s.include?("roof")
+        is[:party      ] = set.keys.to_s.include?("party")
+        is[:grade      ] = set.keys.to_s.include?("grade")
+        is[:balcony    ] = set.keys.to_s.include?("balcony")
+        is[:balconysill] = set.keys.to_s.include?("balconysill")
+        is[:rimjoist   ] = set.keys.to_s.include?("rimjoist")
 
         # Label edge as :head, :sill or :jamb if linked to:
         #   1x subsurface
@@ -984,11 +986,11 @@ RSpec.describe TBD_Tests do
             uncle  = deratables.first unless deratables.first == id # uncle #1?
             uncle  = deratables.last  unless deratables.last  == id # uncle #2?
 
-            pops[:w  ] = surfaces[id   ].key?(:windows  )
-            pops[:d  ] = surfaces[id   ].key?(:doors    )
+            pops[:w  ] = surfaces[id   ].key?(:windows)
+            pops[:d  ] = surfaces[id   ].key?(:doors)
             pops[:s  ] = surfaces[id   ].key?(:skylights)
-            uncles[:w] = surfaces[uncle].key?(:windows  )
-            uncles[:d] = surfaces[uncle].key?(:doors    )
+            uncles[:w] = surfaces[uncle].key?(:windows)
+            uncles[:d] = surfaces[uncle].key?(:doors)
             uncles[:s] = surfaces[uncle].key?(:skylights)
 
             boys   += surfaces[id   ][:windows  ].keys if   pops[:w]
@@ -1087,6 +1089,11 @@ RSpec.describe TBD_Tests do
           set[:parapetconcave] = shorts[:val][:parapetconcave] if concave
           set[:parapetconvex ] = shorts[:val][:parapetconvex ] if convex
            is[:parapet       ] = true
+
+          # set[:roof          ] = shorts[:val][:roof          ] if flat
+          # set[:roofconcave   ] = shorts[:val][:roofconcave   ] if concave
+          # set[:roofconvex    ] = shorts[:val][:roofconvex    ] if convex
+          #   is[:roof         ] = true
         end
 
         # Label edge as :party if linked to:
@@ -1144,7 +1151,9 @@ RSpec.describe TBD_Tests do
         #   1x deratable surface
         #   1x CONDITIONED floor
         #   1x shade (optional)
+        #   1x subsurface (optional)
         balcony = false
+        balconysill = false
 
         edge[:surfaces].keys.each do |i|
           break if balcony
@@ -1154,7 +1163,15 @@ RSpec.describe TBD_Tests do
         end
 
         edge[:surfaces].keys.each do |i|
-          break     if is[:rimjoist] || is[:balcony]
+          break unless balcony
+          break     if balconysill
+          next      if i == id
+
+          balconysill = holes.key?(i)
+        end
+
+        edge[:surfaces].keys.each do |i|
+          break     if is[:rimjoist] || is[:balcony] || is[:balconysill]
           break unless deratables.size == 2
           break     if floors.key?(id)
           next      if i == id
@@ -1165,6 +1182,7 @@ RSpec.describe TBD_Tests do
 
           other = deratables.first unless deratables.first == id
           other = deratables.last  unless deratables.last  == id
+          other = id                   if deratables.size  == 1
 
           s1      = edge[:surfaces][id   ]
           s2      = edge[:surfaces][other]
@@ -1172,7 +1190,12 @@ RSpec.describe TBD_Tests do
           convex  = TBD.convex?(s1, s2)
           flat    = !concave && !convex
 
-          if balcony
+          if balconysill
+            set[:balconysill       ] = shorts[:val][:balconysill       ] if flat
+            set[:balconysillconcave] = shorts[:val][:balconysillconcave] if concave
+            set[:balconysillconvex ] = shorts[:val][:balconysillconvex ] if convex
+             is[:balconysill       ] = true
+          elsif balcony
             set[:balcony        ] = shorts[:val][:balcony        ] if flat
             set[:balconyconcave ] = shorts[:val][:balconyconcave ] if concave
             set[:balconyconvex  ] = shorts[:val][:balconyconvex  ] if convex
@@ -1234,9 +1257,10 @@ RSpec.describe TBD_Tests do
 
     expect(w1_count).to eq(2)
 
-    n_deratables                 = 0
+    n_derating_edges             = 0
     n_edges_at_grade             = 0
     n_edges_as_balconies         = 0
+    n_edges_as_balconysills      = 0
     n_edges_as_parapets          = 0
     n_edges_as_rimjoists         = 0
     n_edges_as_concave_rimjoists = 0
@@ -1255,11 +1279,12 @@ RSpec.describe TBD_Tests do
     edges.values.each do |edge|
       next unless edge.key?(:psi)
 
-      n_deratables                 += 1
+      n_derating_edges             += 1
       n_edges_at_grade             += 1 if edge[:psi].key?(:grade)
       n_edges_at_grade             += 1 if edge[:psi].key?(:gradeconcave)
       n_edges_at_grade             += 1 if edge[:psi].key?(:gradeconvex)
       n_edges_as_balconies         += 1 if edge[:psi].key?(:balcony)
+      n_edges_as_balconysills      += 1 if edge[:psi].key?(:balconysill)
       n_edges_as_parapets          += 1 if edge[:psi].key?(:parapetconcave)
       n_edges_as_parapets          += 1 if edge[:psi].key?(:parapetconvex)
       n_edges_as_rimjoists         += 1 if edge[:psi].key?(:rimjoist)
@@ -1277,19 +1302,20 @@ RSpec.describe TBD_Tests do
       n_edges_as_transitions       += 1 if edge[:psi].key?(:transition)
     end
 
-    expect(n_deratables                ).to eq(66)
+    expect(n_derating_edges            ).to eq(66)
     expect(n_edges_at_grade            ).to eq( 0)
-    expect(n_edges_as_balconies        ).to eq( 4)
+    expect(n_edges_as_balconies        ).to eq( 2) # not balconysills
+    expect(n_edges_as_balconysills     ).to eq( 2) # == sills
     expect(n_edges_as_parapets         ).to eq( 8)
     expect(n_edges_as_rimjoists        ).to eq( 5)
     expect(n_edges_as_concave_rimjoists).to eq( 5)
     expect(n_edges_as_convex_rimjoists ).to eq(18)
     expect(n_edges_as_fenestrations    ).to eq( 0)
     expect(n_edges_as_heads            ).to eq( 2)
-    expect(n_edges_as_sills            ).to eq( 2)
+    expect(n_edges_as_sills            ).to eq( 2) # == balcony sills
     expect(n_edges_as_jambs            ).to eq( 4)
     expect(n_edges_as_concave_jambs    ).to eq( 0)
-    expect(n_edges_as_convex_jambs     ).to eq( 4)
+    expect(n_edges_as_convex_jambs     ).to eq( 4) # 4x edges around skylight
     expect(n_edges_as_corners          ).to eq( 0)
     expect(n_edges_as_concave_corners  ).to eq( 4)
     expect(n_edges_as_convex_corners   ).to eq(12)
@@ -1314,7 +1340,6 @@ RSpec.describe TBD_Tests do
       # Retrieve valid linked surfaces as deratables.
       edge[:surfaces].each do |id, s|
         next unless surfaces.key?(id)
-        # next
 
         deratables[id] = s if surfaces[id][:deratable]
       end
@@ -1401,38 +1426,36 @@ RSpec.describe TBD_Tests do
       next unless surface.key?(:r)
       next unless surface.key?(:edges)
       next unless surface.key?(:heatloss)
-
       next unless surface[:heatloss].abs > TOL
 
-      model.getSurfaces.each do |s|
-        next unless id == s.nameString
+      s = model.getSurfaceByName(id)
+      next if s.empty?
 
-        index     = surface[:index       ]
-        current_c = surface[:construction]
+      s = s.get
 
-        c = current_c.clone(model).to_LayeredConstruction.get
-        m = nil
-        m = TBD.derate(id, surface, c) if index
+      index     = surface[:index       ]
+      current_c = surface[:construction]
+      c         = current_c.clone(model).to_LayeredConstruction.get
+      m         = nil
+      m         = TBD.derate(id, surface, c) if index
 
-        if m
-          c.setLayer(index, m)
-          c.setName("#{id} c tbd")
-          s.setConstruction(c)
+      if m
+        c.setLayer(index, m)
+        c.setName("#{id} c tbd")
+        s.setConstruction(c)
 
-          if s.outsideBoundaryCondition.downcase == "surface"
-            unless s.adjacentSurface.empty?
-              adjacent = s.adjacentSurface.get
-              nom      = adjacent.nameString
-              default  = adjacent.isConstructionDefaulted == false
+        if s.outsideBoundaryCondition.downcase == "surface"
+          unless s.adjacentSurface.empty?
+            adjacent = s.adjacentSurface.get
+            nom      = adjacent.nameString
+            default  = adjacent.isConstructionDefaulted == false
 
-              if default && surfaces.key?(nom)
-                current_cc = surfaces[nom][:construction]
-
-                cc = current_cc.clone(model).to_LayeredConstruction.get
-                cc.setLayer(surfaces[nom][:index], m)
-                cc.setName("#{nom} c tbd")
-                adjacent.setConstruction(cc)
-              end
+            if default && surfaces.key?(nom)
+              current_cc = surfaces[nom][:construction]
+              cc         = current_cc.clone(model).to_LayeredConstruction.get
+              cc.setLayer(surfaces[nom][:index], m)
+              cc.setName("#{nom} c tbd")
+              adjacent.setConstruction(cc)
             end
           end
         end
@@ -1467,6 +1490,133 @@ RSpec.describe TBD_Tests do
       expect(s.get.isConstructionDefaulted).to be false
       expect(s.get.construction.get.nameString).to include(" tbd")
     end
+  end
+
+  it "can check for balcony sills (ASHRAE 90.1 2022)" do
+    translator = OpenStudio::OSVersion::VersionTranslator.new
+    TBD.clean!
+
+    file  = File.join(__dir__, "files/osms/out/loscrigno.osm")
+    path  = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model).to_not be_empty
+    model = model.get
+
+    argh = {option: "90.1.22|steel.m|default"}
+
+    json     = TBD.process(model, argh)
+    expect(json).to be_a(Hash)
+    expect(json).to have_key(:io)
+    expect(json).to have_key(:surfaces)
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+    expect(TBD.status).to be_zero
+    expect(TBD.logs).to be_empty
+    expect(surfaces).to be_a Hash
+    expect(surfaces.size).to eq(27)
+    expect(io).to be_a(Hash)
+    expect(io).to have_key(:edges)
+    expect(io[:edges].size).to eq(66)
+
+    n_edges_at_grade             = 0
+    n_edges_as_balconies         = 0
+    n_edges_as_balconysills      = 0
+    n_edges_as_concave_parapets  = 0
+    n_edges_as_convex_parapets   = 0
+    n_edges_as_rimjoists         = 0
+    n_edges_as_concave_rimjoists = 0
+    n_edges_as_convex_rimjoists  = 0
+    n_edges_as_fenestrations     = 0
+    n_edges_as_heads             = 0
+    n_edges_as_sills             = 0
+    n_edges_as_jambs             = 0
+    n_edges_as_concave_jambs     = 0
+    n_edges_as_convex_jambs      = 0
+    n_edges_as_corners           = 0
+    n_edges_as_concave_corners   = 0
+    n_edges_as_convex_corners    = 0
+    n_edges_as_transitions       = 0
+
+    io[:edges].each do |edge|
+      expect(edge).to have_key(:type)
+
+      n_edges_at_grade             += 1 if edge[:type] == :grade
+      n_edges_at_grade             += 1 if edge[:type] == :gradeconcave
+      n_edges_at_grade             += 1 if edge[:type] == :gradeconvex
+      n_edges_as_balconies         += 1 if edge[:type] == :balcony
+      n_edges_as_balconies         += 1 if edge[:type] == :balconyconcave
+      n_edges_as_balconies         += 1 if edge[:type] == :balconyconvex
+      n_edges_as_balconysills      += 1 if edge[:type] == :balconysill
+      n_edges_as_balconysills      += 1 if edge[:type] == :balconysillconcave
+      n_edges_as_balconysills      += 1 if edge[:type] == :balconysillconvex
+      n_edges_as_concave_parapets  += 1 if edge[:type] == :parapetconcave
+      n_edges_as_convex_parapets   += 1 if edge[:type] == :parapetconvex
+      n_edges_as_rimjoists         += 1 if edge[:type] == :rimjoist
+      n_edges_as_concave_rimjoists += 1 if edge[:type] == :rimjoistconcave
+      n_edges_as_convex_rimjoists  += 1 if edge[:type] == :rimjoistconvex
+      n_edges_as_fenestrations     += 1 if edge[:type] == :fenestration
+      n_edges_as_heads             += 1 if edge[:type] == :head
+      n_edges_as_heads             += 1 if edge[:type] == :headconcave
+      n_edges_as_heads             += 1 if edge[:type] == :headconvex
+      n_edges_as_sills             += 1 if edge[:type] == :sill
+      n_edges_as_sills             += 1 if edge[:type] == :sillconcave
+      n_edges_as_sills             += 1 if edge[:type] == :sillconvex
+      n_edges_as_jambs             += 1 if edge[:type] == :jamb
+      n_edges_as_concave_jambs     += 1 if edge[:type] == :jambconcave
+      n_edges_as_convex_jambs      += 1 if edge[:type] == :jambconvex
+      n_edges_as_corners           += 1 if edge[:type] == :corner
+      n_edges_as_concave_corners   += 1 if edge[:type] == :cornerconcave
+      n_edges_as_convex_corners    += 1 if edge[:type] == :cornerconvex
+      n_edges_as_transitions       += 1 if edge[:type] == :transition
+    end
+
+    expect(n_edges_at_grade            ).to eq( 0)
+    expect(n_edges_as_balconies        ).to eq( 2)
+    expect(n_edges_as_balconysills     ).to eq( 2)
+    expect(n_edges_as_concave_parapets ).to eq( 1)
+    expect(n_edges_as_convex_parapets  ).to eq( 7)
+    expect(n_edges_as_rimjoists        ).to eq( 5)
+    expect(n_edges_as_concave_rimjoists).to eq( 5)
+    expect(n_edges_as_convex_rimjoists ).to eq(18)
+    expect(n_edges_as_fenestrations    ).to eq( 0)
+    expect(n_edges_as_heads            ).to eq( 2)
+    expect(n_edges_as_sills            ).to eq( 0) # balcony sills instead
+    expect(n_edges_as_jambs            ).to eq( 4)
+    expect(n_edges_as_concave_jambs    ).to eq( 0)
+    expect(n_edges_as_convex_jambs     ).to eq( 0)
+    expect(n_edges_as_corners          ).to eq( 0)
+    expect(n_edges_as_concave_corners  ).to eq( 4)
+    expect(n_edges_as_convex_corners   ).to eq(12)
+    expect(n_edges_as_transitions      ).to eq( 4)
+
+    # "90.1.22|steel.m|default" vs "poor (BETBG)".
+    expect(surfaces["s_floor"   ][:heatloss]).to be_within(TOL).of( 2.700) # 8.800
+    expect(surfaces["s_E_wall"  ][:heatloss]).to be_within(TOL).of( 1.170) # 5.041
+    expect(surfaces["p_E_floor" ][:heatloss]).to be_within(TOL).of( 5.730) #18.650
+    expect(surfaces["s_S_wall"  ][:heatloss]).to be_within(TOL).of( 1.540) # 6.583
+    expect(surfaces["e_W_wall"  ][:heatloss]).to be_within(TOL).of( 0.320) # 6.023
+    expect(surfaces["p_N_wall"  ][:heatloss]).to be_within(TOL).of(11.440) #37.250
+    expect(surfaces["p_S2_wall" ][:heatloss]).to be_within(TOL).of( 8.160) #27.268
+    expect(surfaces["p_S1_wall" ][:heatloss]).to be_within(TOL).of( 2.040) # 7.063
+    expect(surfaces["g_S_wall"  ][:heatloss]).to be_within(TOL).of(15.860) #56.150
+    expect(surfaces["p_floor"   ][:heatloss]).to be_within(TOL).of( 3.070) #10.000
+    expect(surfaces["p_W1_floor"][:heatloss]).to be_within(TOL).of( 4.230) #13.775
+    expect(surfaces["e_N_wall"  ][:heatloss]).to be_within(TOL).of( 0.950) # 4.727
+    expect(surfaces["s_N_wall"  ][:heatloss]).to be_within(TOL).of( 1.540) # 6.583
+    expect(surfaces["g_E_wall"  ][:heatloss]).to be_within(TOL).of( 4.300) #18.195
+    expect(surfaces["e_S_wall"  ][:heatloss]).to be_within(TOL).of( 0.850) # 7.703
+    expect(surfaces["e_top"     ][:heatloss]).to be_within(TOL).of( 1.430) # 4.400
+    expect(surfaces["s_W_wall"  ][:heatloss]).to be_within(TOL).of( 1.170) # 5.670
+    expect(surfaces["e_E_wall"  ][:heatloss]).to be_within(TOL).of( 0.320) # 6.023
+    expect(surfaces["e_floor"   ][:heatloss]).to be_within(TOL).of( 2.460) # 8.007
+    expect(surfaces["g_W_wall"  ][:heatloss]).to be_within(TOL).of( 4.300) #18.195
+    expect(surfaces["g_N_wall"  ][:heatloss]).to be_within(TOL).of(15.950) #54.255
+    expect(surfaces["p_W2_floor"][:heatloss]).to be_within(TOL).of( 4.220) #13.729
+
+    expect(argh).to have_key(:io)
+    out  = JSON.pretty_generate(argh[:io])
+    outP = File.join(__dir__, "../json/tbd_loscrigno1.out.json")
+    File.open(outP, "w") { |outP| outP.puts out }
   end
 
   it "can process DOE Prototype smalloffice.osm" do
@@ -3532,7 +3682,7 @@ RSpec.describe TBD_Tests do
     # First, basic IO tests with invalid entries.
     k = TBD::KHI.new
     expect(k.point).to be_a(Hash)
-    expect(k.point.size).to eq(6)
+    expect(k.point.size).to eq(14)
 
     # Invalid identifier key.
     new_KHI = { name: "new_KHI", point: 1.0 }
@@ -3555,7 +3705,7 @@ RSpec.describe TBD_Tests do
     expect(k.append(new_KHI)).to be true
     expect(TBD.status).to be_zero
     expect(k.point.keys).to include("[]")
-    expect(k.point.size).to eq(7)
+    expect(k.point.size).to eq(15)
 
     # Existing identifier.
     new_KHI = { id: "code (Quebec)", point: 1.0 }
@@ -3902,9 +4052,9 @@ RSpec.describe TBD_Tests do
     expect(ps.set).to be_a(Hash)
     expect(ps.has).to be_a(Hash)
     expect(ps.val).to be_a(Hash)
-    expect(ps.set.size).to eq(8)
-    expect(ps.has.size).to eq(8)
-    expect(ps.val.size).to eq(8)
+    expect(ps.set.size).to eq(16)
+    expect(ps.has.size).to eq(16)
+    expect(ps.val.size).to eq(16)
 
     expect(ps.gen(nil)).to be false
     expect(TBD.status).to be_zero
@@ -3932,9 +4082,9 @@ RSpec.describe TBD_Tests do
     expect(ps.set.keys).to include("[]")
     expect(ps.has.keys).to include("[]")
     expect(ps.val.keys).to include("[]")
-    expect(ps.set.size).to eq(9)
-    expect(ps.has.size).to eq(9)
-    expect(ps.val.size).to eq(9)
+    expect(ps.set.size).to eq(17)
+    expect(ps.has.size).to eq(17)
+    expect(ps.val.size).to eq(17)
 
     # Existing identifier.
     new_PSI = { id: "code (Quebec)", balcony: 1.0 }
@@ -4302,7 +4452,7 @@ RSpec.describe TBD_Tests do
 
     io[:psis].each { |p| expect(psi.append(p)).to be true }
 
-    expect(psi.set.size).to eq(10)
+    expect(psi.set.size).to eq(18)
     expect(psi.set).to have_key("poor (BETBG)")
     expect(psi.set).to have_key("regular (BETBG)")
     expect(psi.set).to have_key("efficient (BETBG)")
@@ -4310,9 +4460,17 @@ RSpec.describe TBD_Tests do
     expect(psi.set).to have_key("spandrel HP (BETBG)")
     expect(psi.set).to have_key("code (Quebec)")
     expect(psi.set).to have_key("uncompliant (Quebec)")
+    expect(psi.set).to have_key("90.1.22|steel.m|default")
+    expect(psi.set).to have_key("90.1.22|steel.m|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.ex|default")
+    expect(psi.set).to have_key("90.1.22|mass.ex|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.in|default")
+    expect(psi.set).to have_key("90.1.22|mass.in|unmitigated")
+    expect(psi.set).to have_key("90.1.22|wood.fr|default")
+    expect(psi.set).to have_key("90.1.22|wood.fr|unmitigated")
     expect(psi.set).to have_key("(non thermal bridging)")
-    expect(psi.set).to have_key("good")
-    expect(psi.set).to have_key("compliant")
+    expect(psi.set).to have_key("good")      # appended
+    expect(psi.set).to have_key("compliant") # appended
 
     # Similar treatment for khis.
     khi = TBD::KHI.new
@@ -4320,17 +4478,25 @@ RSpec.describe TBD_Tests do
 
     io[:khis].each { |k| expect(khi.append(k)).to be true }
 
-    expect(khi.point.size).to eq(8)
+    expect(khi.point.size).to eq(16)
     expect(khi.point).to have_key("poor (BETBG)")
     expect(khi.point).to have_key("regular (BETBG)")
     expect(khi.point).to have_key("efficient (BETBG)")
     expect(khi.point).to have_key("code (Quebec)")
     expect(khi.point).to have_key("uncompliant (Quebec)")
+    expect(khi.point).to have_key("90.1.22|steel.m|default")
+    expect(khi.point).to have_key("90.1.22|steel.m|unmitigated")
+    expect(khi.point).to have_key("90.1.22|mass.ex|default")
+    expect(khi.point).to have_key("90.1.22|mass.ex|unmitigated")
+    expect(khi.point).to have_key("90.1.22|mass.in|default")
+    expect(khi.point).to have_key("90.1.22|mass.in|unmitigated")
+    expect(khi.point).to have_key("90.1.22|wood.fr|default")
+    expect(khi.point).to have_key("90.1.22|wood.fr|unmitigated")
     expect(khi.point).to have_key("(non thermal bridging)")
-    expect(khi.point).to have_key("column")
-    expect(khi.point).to have_key("support")
+    expect(khi.point).to have_key("column")  # appended
+    expect(khi.point).to have_key("support") # appended
 
-    expect(khi.point["column"] ).to eq(0.5)
+    expect(khi.point["column" ]).to eq(0.5)
     expect(khi.point["support"]).to eq(0.5)
 
     expect(psi.set).to have_key("spandrel (BETBG)")
@@ -4397,7 +4563,7 @@ RSpec.describe TBD_Tests do
 
     io[:psis].each { |p| expect(psi.append(p)).to be true }
 
-    expect(psi.set.size).to eq(10)
+    expect(psi.set.size).to eq(18)
     expect(psi.set).to have_key("poor (BETBG)")
     expect(psi.set).to have_key("regular (BETBG)")
     expect(psi.set).to have_key("efficient (BETBG)")
@@ -4405,9 +4571,17 @@ RSpec.describe TBD_Tests do
     expect(psi.set).to have_key("spandrel HP (BETBG)")
     expect(psi.set).to have_key("code (Quebec)")
     expect(psi.set).to have_key("uncompliant (Quebec)")
+    expect(psi.set).to have_key("90.1.22|steel.m|default")
+    expect(psi.set).to have_key("90.1.22|steel.m|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.ex|default")
+    expect(psi.set).to have_key("90.1.22|mass.ex|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.in|default")
+    expect(psi.set).to have_key("90.1.22|mass.in|unmitigated")
+    expect(psi.set).to have_key("90.1.22|wood.fr|default")
+    expect(psi.set).to have_key("90.1.22|wood.fr|unmitigated")
     expect(psi.set).to have_key("(non thermal bridging)")
-    expect(psi.set).to have_key("OK")
-    expect(psi.set).to have_key("Awesome")
+    expect(psi.set).to have_key("OK")      # appended
+    expect(psi.set).to have_key("Awesome") # appended
 
     expect(psi.set["Awesome"][:rimjoist]).to eq(0.2)
     expect(io).to have_key(:building)
@@ -4449,6 +4623,7 @@ RSpec.describe TBD_Tests do
 
     io[:psis].each { |pzi| expect(psi.append(pzi)).to be true }
 
+    expect(psi.set.size).to eq(19)
     expect(psi.set).to have_key("poor (BETBG)")
     expect(psi.set).to have_key("regular (BETBG)")
     expect(psi.set).to have_key("efficient (BETBG)")
@@ -4456,12 +4631,19 @@ RSpec.describe TBD_Tests do
     expect(psi.set).to have_key("spandrel HP (BETBG)")
     expect(psi.set).to have_key("code (Quebec)")
     expect(psi.set).to have_key("uncompliant (Quebec)")
+    expect(psi.set).to have_key("90.1.22|steel.m|default")
+    expect(psi.set).to have_key("90.1.22|steel.m|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.ex|default")
+    expect(psi.set).to have_key("90.1.22|mass.ex|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.in|default")
+    expect(psi.set).to have_key("90.1.22|mass.in|unmitigated")
+    expect(psi.set).to have_key("90.1.22|wood.fr|default")
+    expect(psi.set).to have_key("90.1.22|wood.fr|unmitigated")
     expect(psi.set).to have_key("(non thermal bridging)")
-    expect(psi.set).to have_key("OK")
-    expect(psi.set).to have_key("Awesome")
-    expect(psi.set).to have_key("Party wall edge")
+    expect(psi.set).to have_key("OK")              # appended
+    expect(psi.set).to have_key("Awesome")         # appended
+    expect(psi.set).to have_key("Party wall edge") # appended
 
-    expect(psi.set.size).to eq(11)
     expect(psi.set["Party wall edge"][:party]).to eq(0.4)
     expect(io).to have_key(:surfaces)
     expect(io).to have_key(:building)
@@ -4523,6 +4705,7 @@ RSpec.describe TBD_Tests do
 
     io[:psis].each { |p| expect(psi.append(p)).to be true }
 
+    expect(psi.set.size).to eq(17)
     expect(psi.set).to have_key("poor (BETBG)")
     expect(psi.set).to have_key("regular (BETBG)")
     expect(psi.set).to have_key("efficient (BETBG)")
@@ -4530,11 +4713,18 @@ RSpec.describe TBD_Tests do
     expect(psi.set).to have_key("spandrel HP (BETBG)")
     expect(psi.set).to have_key("code (Quebec)")
     expect(psi.set).to have_key("uncompliant (Quebec)")
+    expect(psi.set).to have_key("90.1.22|steel.m|default")
+    expect(psi.set).to have_key("90.1.22|steel.m|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.ex|default")
+    expect(psi.set).to have_key("90.1.22|mass.ex|unmitigated")
+    expect(psi.set).to have_key("90.1.22|mass.in|default")
+    expect(psi.set).to have_key("90.1.22|mass.in|unmitigated")
+    expect(psi.set).to have_key("90.1.22|wood.fr|default")
+    expect(psi.set).to have_key("90.1.22|wood.fr|unmitigated")
     expect(psi.set).to have_key("(non thermal bridging)")
-    expect(psi.set).to have_key("OK")
+    expect(psi.set).to have_key("OK")              # appended
 
     expect(psi.set["OK"][:party]).to eq(0.8)
-    expect(psi.set.size).to eq(9)
 
     # Load minimal PSI JSON example.
     argh[:io_path] = File.join(__dir__, "../json/tbd_minimal_PSI.json")
