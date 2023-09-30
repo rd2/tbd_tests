@@ -17,9 +17,7 @@ RSpec.describe TBD_Tests do
     # The following populates OpenStudio and Topolys models of "Lo Scrigno"
     # (or Jewel Box), by Renzo Piano (Lingotto Factory, Turin); a cantilevered,
     # single space art gallery (space #1) above a supply plenum with slanted
-    # undersides (space #2), and resting on four main pillars. For the purposes
-    # of the RSpec, vertical access (elevator and stairs, fully glazed) are
-    # modelled as extensions of either space.
+    # undersides (space #2), and resting on four main pillars.
 
     # The first ~800 lines generate the OpenStudio model from scratch, relying
     # the OpenStudio SDK and SketchUp-fed 3D surface vertices. It would be
@@ -32,8 +30,15 @@ RSpec.describe TBD_Tests do
     building = model.getBuilding
 
     os_s = OpenStudio::Model::ShadingSurfaceGroup.new(model)
-    os_g = OpenStudio::Model::Space.new(model) # gallery "g" & elevator "e"
-    os_p = OpenStudio::Model::Space.new(model) # plenum "p" & stairwell "s"
+    # For the purposes of the RSpec, vertical access (elevator and stairs,
+    # normally fully glazed) are modelled as (opaque) extensions of either
+    # space. Surfaces are prefixed as follows:
+    #   - "g_" : art gallery
+    #   - "p_" : underfloor plenum (supplying gallery)
+    #   - "s_" : stairwell (leading to/through plenum & gallery)
+    #   - "e_" : (side) elevator leading to gallery
+    os_g = OpenStudio::Model::Space.new(model) # gallery & elevator
+    os_p = OpenStudio::Model::Space.new(model) # plenum & stairwell
     os_g.setName("scrigno_gallery")
     os_p.setName( "scrigno_plenum")
 
@@ -43,6 +48,7 @@ RSpec.describe TBD_Tests do
     construction = OpenStudio::Model::Construction.new(model)
     fenestration = OpenStudio::Model::Construction.new(model)
     elevator     = OpenStudio::Model::Construction.new(model)
+    shadez       = OpenStudio::Model::Construction.new(model)
     glazing      = OpenStudio::Model::SimpleGlazing.new(model)
     exterior     = OpenStudio::Model::MasslessOpaqueMaterial.new(model)
     xps8x25mm    = OpenStudio::Model::MasslessOpaqueMaterial.new(model)
@@ -52,6 +58,7 @@ RSpec.describe TBD_Tests do
     construction.setName("scrigno_construction")
     fenestration.setName("scrigno_fen")
     elevator.setName("elevator")
+    shadez.setName("scrigno_shading")
     glazing.setName("scrigno_glazing")
     exterior.setName("scrigno_exterior")
     xps8x25mm.setName("xps8x25mm")
@@ -111,6 +118,10 @@ RSpec.describe TBD_Tests do
     layers << interior
     expect(elevator.setLayers(layers)).to be true
 
+    layers  = OpenStudio::Model::MaterialVector.new
+    layers << exterior
+    expect(shadez.setLayers(layers)).to be true
+
     defaults = OpenStudio::Model::DefaultSurfaceConstructions.new(model)
     subs     = OpenStudio::Model::DefaultSubSurfaceConstructions.new(model)
     set      = OpenStudio::Model::DefaultConstructionSet.new(model)
@@ -124,8 +135,15 @@ RSpec.describe TBD_Tests do
     expect(subs.setGlassDoorConstruction(         fenestration)).to be true
     expect(subs.setOverheadDoorConstruction(      fenestration)).to be true
     expect(subs.setSkylightConstruction(          fenestration)).to be true
+    expect(set.setAdiabaticSurfaceConstruction(   construction)).to be true
+    expect(set.setInteriorPartitionConstruction(  construction)).to be true
     expect(set.setDefaultExteriorSurfaceConstructions(defaults)).to be true
+    expect(set.setDefaultInteriorSurfaceConstructions(defaults)).to be true
+    expect(set.setDefaultInteriorSubSurfaceConstructions( subs)).to be true
     expect(set.setDefaultExteriorSubSurfaceConstructions( subs)).to be true
+    expect(set.setSpaceShadingConstruction(             shadez)).to be true
+    expect(set.setBuildingShadingConstruction(          shadez)).to be true
+    expect(set.setSiteShadingConstruction(              shadez)).to be true
     expect(building.setDefaultConstructionSet(             set)).to be true
 
     # Set building shading surfaces:
@@ -192,14 +210,14 @@ RSpec.describe TBD_Tests do
 
     # 1st space: gallery (g) with elevator (e) surfaces
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 49.5) #  5.5m
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0) #  5.5m
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 49.5) # 10.4m
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 49.5)
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 49.5)
 
     os_g_W_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_g_W_wall.setName("g_W_wall")
-    expect(os_g_W_wall.setSpace(os_g)).to be true # 57.2m2
+    expect(os_g_W_wall.setSpace(os_g)).to be true
     expect(os_g_W_wall.surfaceType.downcase).to eq("wall")
     expect(os_g_W_wall.isConstructionDefaulted).to be true
 
@@ -209,80 +227,100 @@ RSpec.describe TBD_Tests do
     expect(c.nameString).to eq("scrigno_construction")
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 49.5) #  5.5m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0) # 36.6m
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0) #  5.5m
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 49.5) # 36.6m
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 49.5)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 49.5)
 
     os_g_N_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_g_N_wall.setName("g_N_wall")
-    expect(os_g_N_wall.setSpace(os_g)).to be true # 201.3m2
+    expect(os_g_N_wall.setSpace(os_g)).to be true
     expect(os_g_N_wall.uFactor).to_not be_empty
     expect(os_g_N_wall.uFactor.get).to be_within(TOL).of(0.31)
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 47.4, 40.2, 46.0) #  2.0m
-    os_v << OpenStudio::Point3d.new( 47.4, 40.2, 44.0) #  1.0m
-    os_v << OpenStudio::Point3d.new( 46.4, 40.2, 44.0) #  2.0m
-    os_v << OpenStudio::Point3d.new( 46.4, 40.2, 46.0) #  1.0m
+    os_v << OpenStudio::Point3d.new( 47.4, 40.2, 46.0)
+    os_v << OpenStudio::Point3d.new( 47.4, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 46.4, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 46.4, 40.2, 46.0)
 
     os_g_N_door = OpenStudio::Model::SubSurface.new(os_v, model)
     os_g_N_door.setName("g_N_door")
     expect(os_g_N_door.setSubSurfaceType("GlassDoor")).to be true
-    expect(os_g_N_door.setSurface(os_g_N_wall)).to be true # 2.0m2
+    expect(os_g_N_door.setSurface(os_g_N_wall)).to be true
     expect(os_g_N_door.uFactor).to_not be_empty
     expect(os_g_N_door.uFactor.get).to be_within(TOL).of(2.00)
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 49.5) #  5.5m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0) #  5.5m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 49.5) # 10.4m
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 49.5)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 49.5)
 
     os_g_E_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_g_E_wall.setName("g_E_wall")
-    expect(os_g_E_wall.setSpace(os_g)).to be true # 57.2m2
+    expect(os_g_E_wall.setSpace(os_g)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 49.5) #  5.5m
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0) #  6.6m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0) #  2.7m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 46.7) #  4.0m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 46.7) #  2.7m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0) # 26.0m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0) #  5.5m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 49.5) # 36.6m
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 49.5)
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 49.5)
 
-    os_g_S_wall = OpenStudio::Model::Surface.new(os_v, model)
-    os_g_S_wall.setName("g_S_wall")
-    expect(os_g_S_wall.setSpace(os_g)).to be true # 190.48m2
-    expect(os_g_S_wall.uFactor).to_not be_empty
-    expect(os_g_S_wall.uFactor.get).to be_within(TOL).of(0.31)
+    os_g_S1_wall = OpenStudio::Model::Surface.new(os_v, model)
+    os_g_S1_wall.setName("g_S1_wall")
+    expect(os_g_S1_wall.setSpace(os_g)).to be true
+    expect(os_g_S1_wall.uFactor).to_not be_empty
+    expect(os_g_S1_wall.uFactor.get).to be_within(TOL).of(0.31)
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 46.4, 29.8, 46.0) #  2.0m
-    os_v << OpenStudio::Point3d.new( 46.4, 29.8, 44.0) #  1.0m
-    os_v << OpenStudio::Point3d.new( 47.4, 29.8, 44.0) #  2.0m
-    os_v << OpenStudio::Point3d.new( 47.4, 29.8, 46.0) #  1.0m
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 49.5)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 46.7)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 46.7)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 49.5)
 
-    os_g_S_door = OpenStudio::Model::SubSurface.new(os_v, model)
-    os_g_S_door.setName("g_S_door")
-    expect(os_g_S_door.setSubSurfaceType("GlassDoor")).to be true
-    expect(os_g_S_door.setSurface(os_g_S_wall)).to be true # 2.0m2
-    expect(os_g_S_door.uFactor).to_not be_empty
-    expect(os_g_S_door.uFactor.get).to be_within(TOL).of(2.00)
+    os_g_S2_wall = OpenStudio::Model::Surface.new(os_v, model)
+    os_g_S2_wall.setName("g_S2_wall")
+    expect(os_g_S2_wall.setSpace(os_g)).to be true
+    expect(os_g_S2_wall.uFactor).to_not be_empty
+    expect(os_g_S2_wall.uFactor.get).to be_within(TOL).of(0.31)
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 49.5) # 10.4m
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 49.5) # 36.6m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 49.5) # 10.4m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 49.5) # 36.6m
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 49.5)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 49.5)
+
+    os_g_S3_wall = OpenStudio::Model::Surface.new(os_v, model)
+    os_g_S3_wall.setName("g_S3_wall")
+    expect(os_g_S3_wall.setSpace(os_g)).to be true
+    expect(os_g_S3_wall.uFactor).to_not be_empty
+    expect(os_g_S3_wall.uFactor.get).to be_within(TOL).of(0.31)
+
+    os_v  = OpenStudio::Point3dVector.new
+    os_v << OpenStudio::Point3d.new( 46.4, 29.8, 46.0)
+    os_v << OpenStudio::Point3d.new( 46.4, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 47.4, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 47.4, 29.8, 46.0)
+
+    os_g_S3_door = OpenStudio::Model::SubSurface.new(os_v, model)
+    os_g_S3_door.setName("g_S3_door")
+    expect(os_g_S3_door.setSubSurfaceType("GlassDoor")).to be true
+    expect(os_g_S3_door.setSurface(os_g_S3_wall)).to be true
+    expect(os_g_S3_door.uFactor).to_not be_empty
+    expect(os_g_S3_door.uFactor.get).to be_within(TOL).of(2.00)
+
+    os_v  = OpenStudio::Point3dVector.new
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 49.5)
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 49.5)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 49.5)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 49.5)
 
     os_g_top = OpenStudio::Model::Surface.new(os_v, model)
     os_g_top.setName("g_top")
-    expect(os_g_top.setSpace(os_g)).to be true # 380.64m2
-    expect(os_g_S_wall.uFactor).to_not be_empty
-    expect(os_g_S_wall.uFactor.get).to be_within(TOL).of(0.31)
+    expect(os_g_top.setSpace(os_g)).to be true
+    expect(os_g_top.uFactor).to_not be_empty
+    expect(os_g_top.uFactor.get).to be_within(TOL).of(0.31)
     expect(os_g_top.surfaceType.downcase).to eq("roofceiling")
     expect(os_g_top.isConstructionDefaulted).to be true
 
@@ -291,35 +329,36 @@ RSpec.describe TBD_Tests do
     expect(c.isOpaque).to be true
     expect(c.nameString).to eq("scrigno_construction")
 
+    # Leaving a 1" strip of rooftop (0.915 m2) so roof m2 > skylight m2.
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 49.5) # 10.4m
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 49.5) # 36.6m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 49.5) # 10.4m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 49.5) # 36.6m
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2        , 49.5)
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8 + 0.025, 49.5)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8 + 0.025, 49.5)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2        , 49.5)
 
     os_g_sky = OpenStudio::Model::SubSurface.new(os_v, model)
     os_g_sky.setName("g_sky")
-    expect(os_g_sky.setSurface(os_g_top)).to be true # 380.64m2
+    expect(os_g_sky.setSurface(os_g_top)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 46.7) #  1.5m
-    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 46.7) #  4.0m
-    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 46.7) #  1.5m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 46.7) #  4.0m
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 46.7)
+    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 46.7)
+    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 46.7)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 46.7)
 
     os_e_top = OpenStudio::Model::Surface.new(os_v, model)
     os_e_top.setName("e_top")
-    expect(os_e_top.setSpace(os_g)).to be true # 6.0m2
+    expect(os_e_top.setSpace(os_g)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 40.8) #  1.5m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 40.8) #  4.0m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 40.8) #  1.5m
-    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 40.8) #  4.0m
+    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 40.8)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 40.8)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 40.8)
+    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 40.8)
 
     os_e_floor = OpenStudio::Model::Surface.new(os_v, model)
     os_e_floor.setName("e_floor")
-    expect(os_e_floor.setSpace(os_g)).to be true # 6.0m2
+    expect(os_e_floor.setSpace(os_g)).to be true
     expect(os_e_floor.setOutsideBoundaryCondition("Outdoors")).to be true
     expect(os_e_floor.surfaceType.downcase).to eq("floor")
     expect(os_e_floor.isConstructionDefaulted).to be true
@@ -337,230 +376,255 @@ RSpec.describe TBD_Tests do
     expect(c.nameString).to eq("elevator")
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 46.7) #  5.9m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 40.8) #  1.5m
-    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 40.8) #  5.9m
-    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 46.7) #  1.5m
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 46.7)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 40.8)
+    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 40.8)
+    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 46.7)
 
     os_e_W_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_e_W_wall.setName("e_W_wall")
-    expect(os_e_W_wall.setSpace(os_g)).to be true # 8.85m2
+    expect(os_e_W_wall.setSpace(os_g)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 46.7) #  5.9m
-    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 40.8) #  4.0m
-    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 40.8) #  5.5m
-    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 46.7) #  4.0m
+    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 46.7)
+    os_v << OpenStudio::Point3d.new( 24.0, 28.3, 40.8)
+    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 40.8)
+    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 46.7)
 
     os_e_S_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_e_S_wall.setName("e_S_wall")
-    expect(os_e_S_wall.setSpace(os_g)).to be true # 23.6m2
+    expect(os_e_S_wall.setSpace(os_g)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 46.7) #  5.9m
-    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 40.8) #  1.5m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 40.8) #  5.9m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 46.7) #  1.5m
+    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 46.7)
+    os_v << OpenStudio::Point3d.new( 28.0, 28.3, 40.8)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 40.8)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 46.7)
 
     os_e_E_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_e_E_wall.setName("e_E_wall")
-    expect(os_e_E_wall.setSpace(os_g)).to be true # 8.85m2
+    expect(os_e_E_wall.setSpace(os_g)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4) #  1.60m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 40.8) #  4.00m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 40.8) #  2.20m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0) #  4.04m
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4060)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 40.8000)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 40.8000)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0075)
 
     os_e_N_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_e_N_wall.setName("e_N_wall")
-    expect(os_e_N_wall.setSpace(os_g)).to be true # ~7.63m2
+    expect(os_e_N_wall.setSpace(os_g)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0) #  1.60m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4) #  4.04m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0) #  1.00m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0) #  4.00m
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0000)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4060)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0075)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0000)
 
     os_e_p_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_e_p_wall.setName("e_p_wall")
-    expect(os_e_p_wall.setSpace(os_g)).to be true # ~5.2m2
+    expect(os_e_p_wall.setSpace(os_g)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0) # 36.6m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0) # 36.6m
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0)
 
     os_g_floor = OpenStudio::Model::Surface.new(os_v, model)
     os_g_floor.setName("g_floor")
-    expect(os_g_floor.setSpace(os_g) ).to be true # 380.64m2
+    expect(os_g_floor.setSpace(os_g) ).to be true
 
     # 2nd space: plenum (p) with stairwell (s) surfaces
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0) # 36.6m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0) # 36.6m
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0)
 
     os_p_top = OpenStudio::Model::Surface.new(os_v, model)
     os_p_top.setName("p_top")
-    expect(os_p_top.setSpace(os_p)).to be true # 380.64m2
+    expect(os_p_top.setSpace(os_p)).to be true
     expect(os_p_top.setAdjacentSurface(os_g_floor)).to be true
     expect(os_g_floor.setAdjacentSurface(os_p_top)).to be true
     expect(os_p_top.setOutsideBoundaryCondition(  "Surface")).to be true
     expect(os_g_floor.setOutsideBoundaryCondition("Surface")).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0) #  1.00m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0) #  4.04m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4) #  1.60m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0) #  4.00m
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0000)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0075)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4060)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0000)
 
     os_p_e_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_p_e_wall.setName("p_e_wall")
-    expect(os_p_e_wall.setSpace(os_p)).to be true # ~5.2m2
+    expect(os_p_e_wall.setSpace(os_p)).to be true
     expect(os_e_p_wall.setAdjacentSurface(os_p_e_wall)).to be true
     expect(os_p_e_wall.setAdjacentSurface(os_e_p_wall)).to be true
     expect(os_p_e_wall.setOutsideBoundaryCondition("Surface")).to be true
     expect(os_e_p_wall.setOutsideBoundaryCondition("Surface")).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0) #   6.67m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0) #   1.00m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0) #   6.60m
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0000)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0075)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 44.0000)
 
     os_p_S1_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_p_S1_wall.setName("p_S1_wall")
-    expect(os_p_S1_wall.setSpace(os_p)).to be true # ~3.3m2
+    expect(os_p_S1_wall.setSpace(os_p)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0) #   1.60m
-    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4) #   2.73m
-    os_v << OpenStudio::Point3d.new( 30.7, 29.8, 42.0) #  10.00m
-    os_v << OpenStudio::Point3d.new( 40.7, 29.8, 42.0) #  13.45m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0) #  25.00m
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 44.0000)
+    os_v << OpenStudio::Point3d.new( 28.0, 29.8, 42.4060)
+    os_v << OpenStudio::Point3d.new( 30.7, 29.8, 42.0000)
+    os_v << OpenStudio::Point3d.new( 40.7, 29.8, 42.0000)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0000)
 
     os_p_S2_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_p_S2_wall.setName("p_S2_wall")
-    expect(os_p_S2_wall.setSpace(os_p)).to be true # 38.15m2
+    expect(os_p_S2_wall.setSpace(os_p)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0) #  13.45m
-    os_v << OpenStudio::Point3d.new( 40.7, 40.2, 42.0) #  10.00m
-    os_v << OpenStudio::Point3d.new( 30.7, 40.2, 42.0) #  13.45m
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0) #  36.60m
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 40.7, 40.2, 42.0)
+    os_v << OpenStudio::Point3d.new( 30.7, 40.2, 42.0)
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0)
 
     os_p_N_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_p_N_wall.setName("p_N_wall")
-    expect(os_p_N_wall.setSpace(os_p)).to be true # 46.61m2
+    expect(os_p_N_wall.setSpace(os_p)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 30.7, 29.8, 42.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 30.7, 40.2, 42.0) # 10.0m
-    os_v << OpenStudio::Point3d.new( 40.7, 40.2, 42.0) # 10.4m
-    os_v << OpenStudio::Point3d.new( 40.7, 29.8, 42.0) # 10.0m
+    os_v << OpenStudio::Point3d.new( 30.7, 29.8, 42.0)
+    os_v << OpenStudio::Point3d.new( 30.7, 40.2, 42.0)
+    os_v << OpenStudio::Point3d.new( 40.7, 40.2, 42.0)
+    os_v << OpenStudio::Point3d.new( 40.7, 29.8, 42.0)
 
     os_p_floor = OpenStudio::Model::Surface.new(os_v, model)
     os_p_floor.setName("p_floor")
-    expect(os_p_floor.setSpace(os_p)).to be true # 104.00m2
+    expect(os_p_floor.setSpace(os_p)).to be true
     expect(os_p_floor.setOutsideBoundaryCondition("Outdoors")).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 40.7, 29.8, 42.0) # 10.40m
-    os_v << OpenStudio::Point3d.new( 40.7, 40.2, 42.0) # 13.45m
-    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0) # 10.40m
-    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0) # 13.45m
+    os_v << OpenStudio::Point3d.new( 40.7, 29.8, 42.0)
+    os_v << OpenStudio::Point3d.new( 40.7, 40.2, 42.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 40.2, 44.0)
+    os_v << OpenStudio::Point3d.new( 54.0, 29.8, 44.0)
 
     os_p_E_floor = OpenStudio::Model::Surface.new(os_v, model)
     os_p_E_floor.setName("p_E_floor")
-    expect(os_p_E_floor.setSpace(os_p)).to be true # 139.88m2
+    expect(os_p_E_floor.setSpace(os_p)).to be true
     expect(os_p_E_floor.setSurfaceType("Floor")).to be true # walls by default
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0) # 10.40m
-    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0) # ~6.68m
-    os_v << OpenStudio::Point3d.new( 24.0, 40.2, 43.0) # 10.40m
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0) # ~6.68m
+    os_v << OpenStudio::Point3d.new( 17.4, 29.8, 44.0000)
+    os_v << OpenStudio::Point3d.new( 17.4, 40.2, 44.0000)
+    os_v << OpenStudio::Point3d.new( 24.0, 40.2, 43.0075)
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0075)
 
     os_p_W1_floor = OpenStudio::Model::Surface.new(os_v, model)
     os_p_W1_floor.setName("p_W1_floor")
-    expect(os_p_W1_floor.setSpace(os_p)).to be true #  69.44m2
+    expect(os_p_W1_floor.setSpace(os_p)).to be true
     expect(os_p_W1_floor.setSurfaceType("Floor")).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.000) #  3.30m D
-    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 43.000) #  5.06m C
-    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 42.253) #  3.80m I
-    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 42.253) #  5.06m H
-    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 43.000) #  3.30m B
-    os_v << OpenStudio::Point3d.new( 24.0, 40.2, 43.000) #  6.77m A
-    os_v << OpenStudio::Point3d.new( 30.7, 40.2, 42.000) # 10.40m E
-    os_v << OpenStudio::Point3d.new( 30.7, 29.8, 42.000) #  6.77m F
+    os_v << OpenStudio::Point3d.new( 24.0, 29.8, 43.0075)
+    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 43.0075)
+    os_v << OpenStudio::Point3d.new( 30.7, 33.1, 42.0000)
+    os_v << OpenStudio::Point3d.new( 30.7, 29.8, 42.0000)
 
     os_p_W2_floor = OpenStudio::Model::Surface.new(os_v, model)
     os_p_W2_floor.setName("p_W2_floor")
-    expect(os_p_W2_floor.setSpace(os_p)).to be true #  51.23m2
+    expect(os_p_W2_floor.setSpace(os_p)).to be true
     expect(os_p_W2_floor.setSurfaceType("Floor")).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 43.0) #  2.2m
-    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 40.8) #  3.8m
-    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 40.8) #  2.2m
-    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 43.0) #  3.8m
+    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 43.0075)
+    os_v << OpenStudio::Point3d.new( 24.0, 40.2, 43.0075)
+    os_v << OpenStudio::Point3d.new( 30.7, 40.2, 42.0000)
+    os_v << OpenStudio::Point3d.new( 30.7, 36.9, 42.0000)
+
+    os_p_W3_floor = OpenStudio::Model::Surface.new(os_v, model)
+    os_p_W3_floor.setName("p_W3_floor")
+    expect(os_p_W3_floor.setSpace(os_p)).to be true
+    expect(os_p_W3_floor.setSurfaceType("Floor")).to be true
+
+    os_v  = OpenStudio::Point3dVector.new
+    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 42.2556)
+    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 42.2556)
+    os_v << OpenStudio::Point3d.new( 30.7, 36.9, 42.0000)
+    os_v << OpenStudio::Point3d.new( 30.7, 33.1, 42.0000)
+
+    os_p_W4_floor = OpenStudio::Model::Surface.new(os_v, model)
+    os_p_W4_floor.setName("p_W4_floor")
+    expect(os_p_W4_floor.setSpace(os_p)).to be true
+    expect(os_p_W4_floor.setSurfaceType("Floor")).to be true
+
+    os_v  = OpenStudio::Point3dVector.new
+    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 43.0075)
+    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 40.8000)
+    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 40.8000)
+    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 43.0075)
 
     os_s_W_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_s_W_wall.setName("s_W_wall")
-    expect(os_s_W_wall.setSpace(os_p)).to be true #   8.39m2
+    expect(os_s_W_wall.setSpace(os_p)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 42.253) #  1.46m
-    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 40.800) #  5.00m
-    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 40.800) #  2.20m
-    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 43.000) #  5.06m
+    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 42.2556)
+    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 40.8000)
+    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 40.8000)
+    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 43.0075)
 
     os_s_N_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_s_N_wall.setName("s_N_wall")
-    expect(os_s_N_wall.setSpace(os_p)).to be true # 9.15m2
+    expect(os_s_N_wall.setSpace(os_p)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 42.253) #  1.46m
-    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 40.800) #  3.80m
-    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 40.800) #  1.46m
-    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 42.253) #  3.80m
+    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 42.2556)
+    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 40.8000)
+    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 40.8000)
+    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 42.2556)
 
     os_s_E_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_s_E_wall.setName("s_E_wall")
-    expect(os_s_E_wall.setSpace(os_p)).to be true # 5.55m2
+    expect(os_s_E_wall.setSpace(os_p)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 43.000) #  2.20m
-    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 40.800) #  5.00m
-    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 40.800) #  1.46m
-    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 42.253) #  5.06m
+    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 43.0075)
+    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 40.8000)
+    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 40.8000)
+    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 42.2556)
 
     os_s_S_wall = OpenStudio::Model::Surface.new(os_v, model)
     os_s_S_wall.setName("s_S_wall")
-    expect(os_s_S_wall.setSpace(os_p)).to be true # 9.15m2
+    expect(os_s_S_wall.setSpace(os_p)).to be true
 
     os_v  = OpenStudio::Point3dVector.new
-    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 40.8) #  3.8m
-    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 40.8) #  5.0m
-    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 40.8) #  3.8m
-    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 40.8) #  5.0m
+    os_v << OpenStudio::Point3d.new( 24.0, 33.1, 40.8)
+    os_v << OpenStudio::Point3d.new( 24.0, 36.9, 40.8)
+    os_v << OpenStudio::Point3d.new( 29.0, 36.9, 40.8)
+    os_v << OpenStudio::Point3d.new( 29.0, 33.1, 40.8)
 
     os_s_floor = OpenStudio::Model::Surface.new(os_v, model)
     os_s_floor.setName("s_floor")
-    expect(os_s_floor.setSpace(os_p)).to be true # 19.0m2
+    expect(os_s_floor.setSpace(os_p)).to be true
     expect(os_s_floor.setSurfaceType("Floor")).to be true
     expect(os_s_floor.setOutsideBoundaryCondition("Outdoors")).to be true
+
+    # Assign thermal zones.
+    model.getSpaces.each do |space|
+      zone = OpenStudio::Model::ThermalZone.new(model)
+      zone.setName("#{space.nameString}|zone")
+      space.setThermalZone(zone)
+    end
 
     pth = File.join(__dir__, "files/osms/out/loscrigno.osm")
     model.save(pth, true)
 
 
     t_model  = Topolys::Model.new
-    argh     = { setpoints: false}
+    argh     = { setpoints: false, parapet: true }
     surfaces = {}
 
     model.getSurfaces.sort_by { |s| s.nameString }.each do |s|
@@ -572,7 +636,7 @@ RSpec.describe TBD_Tests do
       surfaces[s.nameString] = surface
     end
 
-    expect(surfaces.size).to eq(27)
+    expect(surfaces.size).to eq(31)
 
     surfaces.each do |id, surface|
       expect(surface[:conditioned]).to be true
@@ -603,40 +667,51 @@ RSpec.describe TBD_Tests do
       end
     end
 
-    expect(surfaces["g_top"   ]).to have_key(:type)
-    expect(surfaces["g_S_wall"]).to have_key(:type)
-    expect(surfaces["g_N_wall"]).to have_key(:type)
+    expect(surfaces["g_top"    ]).to have_key(:type)
+    expect(surfaces["g_S1_wall"]).to have_key(:type)
+    expect(surfaces["g_S2_wall"]).to have_key(:type)
+    expect(surfaces["g_S3_wall"]).to have_key(:type)
+    expect(surfaces["g_N_wall" ]).to have_key(:type)
 
-    expect(surfaces["g_top"   ]).to have_key(:skylights)
-    expect(surfaces["g_top"   ]).to_not have_key(:windows)
-    expect(surfaces["g_top"   ]).to_not have_key(:doors)
+    expect(surfaces["g_top"    ]).to have_key(:skylights)
+    expect(surfaces["g_top"    ]).to_not have_key(:windows)
+    expect(surfaces["g_top"    ]).to_not have_key(:doors)
 
-    expect(surfaces["g_S_wall"]).to_not have_key(:skylights)
-    expect(surfaces["g_S_wall"]).to_not have_key(:windows)
-    expect(surfaces["g_S_wall"]).to have_key(:doors)
+    expect(surfaces["g_S1_wall"]).to_not have_key(:skylights)
+    expect(surfaces["g_S1_wall"]).to_not have_key(:windows)
+    expect(surfaces["g_S1_wall"]).to_not have_key(:doors)
+
+    expect(surfaces["g_S2_wall"]).to_not have_key(:skylights)
+    expect(surfaces["g_S2_wall"]).to_not have_key(:windows)
+    expect(surfaces["g_S2_wall"]).to_not have_key(:doors)
+
+    expect(surfaces["g_S3_wall"]).to_not have_key(:skylights)
+    expect(surfaces["g_S3_wall"]).to_not have_key(:windows)
+    expect(surfaces["g_S3_wall"]).to have_key(:doors)
 
     expect(surfaces["g_N_wall"]).to_not have_key(:skylights)
     expect(surfaces["g_N_wall"]).to_not have_key(:windows)
     expect(surfaces["g_N_wall"]).to have_key(:doors)
 
-    expect(surfaces["g_top"   ][:skylights].size).to eq(1)
-    expect(surfaces["g_S_wall"][:doors    ].size).to eq(1)
-    expect(surfaces["g_N_wall"][:doors    ].size).to eq(1)
-    expect(surfaces["g_top"   ][:skylights]).to have_key("g_sky")
-    expect(surfaces["g_S_wall"][:doors    ]).to have_key("g_S_door")
-    expect(surfaces["g_N_wall"][:doors    ]).to have_key("g_N_door")
+    expect(surfaces["g_top"    ][:skylights].size).to eq(1)
+    expect(surfaces["g_S3_wall"][:doors    ].size).to eq(1)
+    expect(surfaces["g_N_wall" ][:doors    ].size).to eq(1)
+    expect(surfaces["g_top"    ][:skylights]).to have_key("g_sky")
+    expect(surfaces["g_S3_wall"][:doors    ]).to have_key("g_S3_door")
+    expect(surfaces["g_N_wall" ][:doors    ]).to have_key("g_N_door")
 
     # Split "surfaces" hash into "floors", "ceilings" and "walls" hashes.
     floors   = surfaces.select  { |_, s|  s[:type] == :floor   }
     ceilings = surfaces.select  { |_, s|  s[:type] == :ceiling }
     walls    = surfaces.select  { |_, s|  s[:type] == :wall    }
+
     floors   = floors.sort_by   { |_, s| [s[:minz], s[:space]] }.to_h
     ceilings = ceilings.sort_by { |_, s| [s[:minz], s[:space]] }.to_h
     walls    = walls.sort_by    { |_, s| [s[:minz], s[:space]] }.to_h
 
-    expect(floors.size  ).to eq( 7)
+    expect(floors.size  ).to eq( 9) # 7
     expect(ceilings.size).to eq( 3)
-    expect(walls.size   ).to eq(17)
+    expect(walls.size   ).to eq(19) # 17
 
     # Fetch OpenStudio shading surfaces & key attributes.
     shades = {}
@@ -697,11 +772,11 @@ RSpec.describe TBD_Tests do
     end
 
     # OpenStudio (opaque) surfaces VS number of Topolys (opaque) faces.
-    expect(surfaces.size     ).to eq(27)
-    expect(t_model.faces.size).to eq(27)
+    expect(surfaces.size     ).to eq(31)
+    expect(t_model.faces.size).to eq(31)
 
     TBD.dads(t_model, shades)
-    expect(t_model.faces.size).to eq(33)
+    expect(t_model.faces.size).to eq(37)
 
     # Loop through Topolys edges and populate TBD edge hash. Initially, there
     # should be a one-to-one correspondence between Topolys and TBD edge
@@ -717,6 +792,7 @@ RSpec.describe TBD_Tests do
         edges[i] = { length: l, v0: e.v0, v1: e.v1, surfaces: {} } unless ex
 
         next if edges[i][:surfaces].key?(wire.attributes[:id])
+
         edges[i][:surfaces][wire.attributes[:id]] = { wire: wire.id }
       end
     end
@@ -725,17 +801,122 @@ RSpec.describe TBD_Tests do
 
     # Next, floors, ceilings & walls; then shades.
     TBD.faces(floors, edges)
-    expect(edges.size).to eq(47)
 
-    TBD.faces(ceilings, edges)
     expect(edges.size).to eq(51)
 
+    TBD.faces(ceilings, edges)
+    expect(edges.size).to eq(60)
+
     TBD.faces(walls, edges)
-    expect(edges.size).to eq(67)
+    expect(edges.size).to eq(78)
 
     TBD.faces(shades, edges)
-    expect(        edges.size).to eq(89)
-    expect(t_model.edges.size).to eq(89)
+    expect(        edges.size).to eq(100)
+    expect(t_model.edges.size).to eq(100)
+
+    # edges.values.each do |edge|
+    #   puts "#{'%5.2f' % edge[:length]}m #{edge[:surfaces].keys.to_a}"
+    # end
+    # 10.38m ["g_sky", "g_top", "g_W_wall"]
+    # 36.60m ["g_sky", "g_top"]
+    # 10.38m ["g_sky", "g_top", "g_E_wall"]
+    # 36.60m ["g_sky", "g_top", "g_N_wall"]
+    #  2.00m ["g_N_door", "g_N_wall"]
+    #  1.00m ["g_N_door", "g_floor", "p_top", "p_N_wall", "g_N_wall", "N_balcony"]
+    #  2.00m ["g_N_door", "g_N_wall"]
+    #  1.00m ["g_N_door", "g_N_wall"]
+    #  2.00m ["g_S3_door", "g_S3_wall"]
+    #  1.00m ["g_S3_door", "g_floor", "p_top", "p_S2_wall", "g_S3_wall", "S_balcony"]
+    #  2.00m ["g_S3_door", "g_S3_wall"]
+    #  1.00m ["g_S3_door", "g_S3_wall"]
+    #  1.50m ["e_floor", "e_W_wall"]
+    #  4.00m ["e_floor", "e_N_wall"]
+    #  1.50m ["e_floor", "e_E_wall"]
+    #  4.00m ["e_floor", "e_S_wall"]
+    #  3.80m ["s_floor", "s_W_wall"]
+    #  5.00m ["s_floor", "s_N_wall"]
+    #  3.80m ["s_floor", "s_E_wall"]
+    #  5.00m ["s_floor", "s_S_wall"]
+    # 10.40m ["p_E_floor", "p_floor"]
+    # 13.45m ["p_E_floor", "p_N_wall"]
+    # 10.40m ["p_E_floor", "g_floor", "p_top", "g_E_wall"]
+    # 13.45m ["p_E_floor", "p_S2_wall"]
+    #  3.30m ["p_W2_floor", "p_W1_floor"]
+    #  5.06m ["p_W2_floor", "s_S_wall"]
+    #  1.72m ["p_W2_floor", "p_W4_floor"]
+    #  3.30m ["p_W2_floor", "p_floor"]
+    #  2.73m ["p_W2_floor", "p_S2_wall"]
+    #  4.04m ["p_W2_floor", "e_N_wall", "e_p_wall", "p_e_wall"]
+    #  3.80m ["p_floor", "p_W4_floor"]
+    #  3.30m ["p_floor", "p_W3_floor"]
+    # 10.00m ["p_floor", "p_N_wall"]
+    # 10.00m ["p_floor", "p_S2_wall"]
+    #  3.80m ["p_W4_floor", "s_E_wall"]
+    #  1.72m ["p_W4_floor", "p_W3_floor"]
+    #  3.30m ["p_W3_floor", "p_W1_floor"]
+    #  6.78m ["p_W3_floor", "p_N_wall"]
+    #  5.06m ["p_W3_floor", "s_N_wall"]
+    # 10.40m ["p_W1_floor", "g_floor", "p_top", "g_W_wall"]
+    #  6.67m ["p_W1_floor", "p_N_wall"]
+    #  3.80m ["p_W1_floor", "s_W_wall"]
+    #  6.67m ["p_W1_floor", "p_S1_wall"]
+    # 28.30m ["g_floor", "p_top", "p_N_wall", "g_N_wall"]
+    #  0.70m ["g_floor", "p_top", "p_N_wall", "g_N_wall", "N_balcony"]
+    #  6.60m ["g_floor", "p_top", "p_N_wall", "g_N_wall"]
+    #  6.60m ["g_floor", "p_top", "p_S2_wall", "g_S3_wall"]
+    # 18.30m ["g_floor", "p_top", "p_S2_wall", "g_S3_wall", "S_balcony"]
+    #  0.10m ["g_floor", "p_top", "p_S2_wall", "g_S3_wall"]
+    #  4.00m ["g_floor", "p_top", "e_p_wall", "p_e_wall"]
+    #  6.60m ["g_floor", "p_top", "p_S1_wall", "g_S1_wall"]
+    #  1.50m ["e_top", "e_W_wall"]
+    #  4.00m ["e_top", "e_S_wall"]
+    #  1.50m ["e_top", "e_E_wall"]
+    #  4.00m ["e_top", "g_S2_wall"]
+    #  0.02m ["g_top", "g_W_wall"]
+    #  6.60m ["g_top", "g_S1_wall"]
+    #  4.00m ["g_top", "g_S2_wall"]
+    # 26.00m ["g_top", "g_S3_wall"]
+    #  0.02m ["g_top", "g_E_wall"]
+    #  5.90m ["e_E_wall", "e_S_wall"]
+    #  1.61m ["e_E_wall", "e_N_wall"]
+    #  1.59m ["e_E_wall", "p_S2_wall", "e_p_wall", "p_e_wall"]
+    #  2.70m ["e_E_wall", "g_S3_wall"]
+    #  2.21m ["e_N_wall", "e_W_wall"]
+    #  5.90m ["e_S_wall", "e_W_wall"]
+    #  2.70m ["e_W_wall", "g_S1_wall"]
+    #  0.99m ["e_W_wall", "e_p_wall", "p_e_wall", "p_S1_wall"]
+    #  2.21m ["s_S_wall", "s_W_wall"]
+    #  1.46m ["s_S_wall", "s_E_wall"]
+    #  1.46m ["s_N_wall", "s_E_wall"]
+    #  2.21m ["s_N_wall", "s_W_wall"]
+    #  5.50m ["g_W_wall", "g_N_wall"]
+    #  5.50m ["g_W_wall", "g_S1_wall"]
+    #  2.80m ["g_S1_wall", "g_S2_wall"]
+    #  5.50m ["g_N_wall", "g_E_wall"]
+    #  5.50m ["g_E_wall", "g_S3_wall"]
+    #  2.80m ["g_S3_wall", "g_S2_wall"]
+    #  1.50m ["S_balcony"]
+    # 19.30m ["S_balcony"]
+    #  1.50m ["S_balcony"]
+    #  1.50m ["N_balcony"]
+    #  1.70m ["N_balcony"]
+    #  1.50m ["N_balcony"]
+    #  7.50m ["r3_shade", "r1_shade"]
+    # 26.00m ["r3_shade"]
+    #  7.50m ["r3_shade", "r4_shade"]
+    # 26.00m ["r3_shade"]
+    #  7.50m ["r2_shade", "r1_shade"]
+    # 26.00m ["r2_shade"]
+    #  7.50m ["r2_shade", "r4_shade"]
+    # 26.00m ["r2_shade"]
+    #  5.00m ["r4_shade"]
+    # 10.30m ["r4_shade"]
+    # 20.00m ["r4_shade"]
+    # 10.30m ["r4_shade"]
+    # 20.00m ["r1_shade"]
+    # 10.30m ["r1_shade"]
+    #  5.00m ["r1_shade"]
+    # 10.30m ["r1_shade"]
 
     # The following surfaces should all share an edge.
     p_S2_wall_face = walls["p_S2_wall"][:face]
@@ -788,9 +969,9 @@ RSpec.describe TBD_Tests do
       expect(p_top_edges.find { |e| e.id == g_floor_edge.id } ).to be_truthy
     end
 
-    expect(floors.size  ).to eq( 7)
+    expect(floors.size  ).to eq( 9)
     expect(ceilings.size).to eq( 3)
-    expect(walls.size   ).to eq(17)
+    expect(walls.size   ).to eq(19)
     expect(shades.size  ).to eq( 6)
 
     zenith = Topolys::Vector3D.new(0, 0, 1).freeze
@@ -820,102 +1001,104 @@ RSpec.describe TBD_Tests do
 
       edge[:surfaces].each do |id, surface|
         t_model.wires.each do |wire|
-          if surface[:wire] == wire.id
-            normal     = surfaces[id][:n]         if surfaces.key?(id)
-            normal     = holes[id].attributes[:n] if holes.key?(   id)
-            normal     = shades[id][:n]           if shades.key?(  id)
-            farthest   = Topolys::Point3D.new(origin.x, origin.y, origin.z)
-            farthest_V = farthest - origin
-            inverted   = false
-            i_origin   = wire.points.index(origin)
-            i_terminal = wire.points.index(terminal)
-            i_last     = wire.points.size - 1
+          next unless surface[:wire] == wire.id
 
-            if i_terminal == 0
-              inverted = true unless i_origin == i_last
-            elsif i_origin == i_last
-              inverted = true unless i_terminal == 0
+          normal     = surfaces[id][:n]         if surfaces.key?(id)
+          normal     = holes[id].attributes[:n] if holes.key?(id)
+          normal     = shades[id][:n]           if shades.key?(id)
+          farthest   = Topolys::Point3D.new(origin.x, origin.y, origin.z)
+          farthest_V = farthest - origin
+          inverted   = false
+          i_origin   = wire.points.index(origin)
+          i_terminal = wire.points.index(terminal)
+          i_last     = wire.points.size - 1
+
+          if i_terminal == 0
+            inverted = true unless i_origin == i_last
+          elsif i_origin == i_last
+            inverted = true unless i_terminal == 0
+          else
+            inverted = true unless i_terminal - i_origin == 1
+          end
+
+          wire.points.each do |point|
+            next if point == origin
+            next if point == terminal
+
+            point_on_plane    = edge_plane.project(point)
+            origin_point_V    = point_on_plane - origin
+            point_V_magnitude = origin_point_V.magnitude
+            next unless point_V_magnitude > TOL
+
+            if inverted
+              plane = Topolys::Plane3D.from_points(terminal, origin, point)
             else
-              inverted = true unless i_terminal - i_origin == 1
+              plane = Topolys::Plane3D.from_points(origin, terminal, point)
             end
 
-            wire.points.each do |point|
-              next if point == origin
-              next if point == terminal
+            dnx = (normal.x - plane.normal.x).abs
+            dny = (normal.y - plane.normal.y).abs
+            dnz = (normal.z - plane.normal.z).abs
+            next unless dnx < TOL && dny < TOL && dnz < TOL
 
-              point_on_plane    = edge_plane.project(point)
-              origin_point_V    = point_on_plane - origin
-              point_V_magnitude = origin_point_V.magnitude
-              next unless point_V_magnitude > TOL
+            farther    = point_V_magnitude > farthest_V.magnitude
+            farthest   = point          if farther
+            farthest_V = origin_point_V if farther
+          end
 
-              if inverted
-                plane = Topolys::Plane3D.from_points(terminal, origin, point)
-              else
-                plane = Topolys::Plane3D.from_points(origin, terminal, point)
-              end
+          angle = edge_V.angle(farthest_V)
+          expect(angle).to be_within(TOL).of(Math::PI / 2)
+          angle = reference_V.angle(farthest_V)
 
-              dnx = (normal.x - plane.normal.x).abs
-              dny = (normal.y - plane.normal.y).abs
-              dnz = (normal.z - plane.normal.z).abs
-              next unless dnx < TOL && dny < TOL && dnz < TOL
+          adjust = false
 
-              farther    = point_V_magnitude > farthest_V.magnitude
-              farthest   = point          if farther
-              farthest_V = origin_point_V if farther
-            end
+          if vertical
+            adjust = true if east.dot(farthest_V) < -TOL
+          else
+            dN  = north.dot(farthest_V)
+            dN1 = north.dot(farthest_V).abs - 1
 
-            angle  = edge_V.angle(farthest_V)
-            expect(angle).to be_within(TOL).of(Math::PI / 2)
-            angle  = reference_V.angle(farthest_V)
-            adjust = false
-
-            if vertical
+            if dN.abs < TOL || dN1.abs < TOL
               adjust = true if east.dot(farthest_V) < -TOL
             else
-              dN  = north.dot(farthest_V)
-              dN1 = north.dot(farthest_V).abs - 1
-
-              if dN.abs < TOL || dN1.abs < TOL
-                adjust = true if east.dot(farthest_V) < -TOL
-              else
-                adjust = true if dN < -TOL
-              end
+              adjust = true if dN < -TOL
             end
-
-            angle  = 2 * Math::PI - angle if adjust
-            angle -= 2 * Math::PI         if (angle - 2 * Math::PI).abs < TOL
-            surface[:angle ] = angle
-            farthest_V.normalize!
-            surface[:polar ] = farthest_V
-            surface[:normal] = normal
           end
+
+          angle  = 2 * Math::PI - angle if adjust
+          angle -= 2 * Math::PI         if (angle - 2 * Math::PI).abs < TOL
+          surface[:angle ] = angle
+          farthest_V.normalize!
+          surface[:polar ] = farthest_V
+          surface[:normal] = normal
         end # end of edge-linked, surface-to-wire loop
       end # end of edge-linked surface loop
 
       edge[:horizontal] = horizontal
       edge[:vertical  ] = vertical
-
       edge[:surfaces  ] = edge[:surfaces].sort_by{ |i, p| p[:angle] }.to_h
     end # end of edge loop
 
-    expect(edges.size        ).to eq(89)
-    expect(t_model.edges.size).to eq(89)
+    expect(edges.size        ).to eq(100)
+    expect(t_model.edges.size).to eq(100)
 
     argh[:option] = "poor (BETBG)"
-    expect(argh.size).to eq(2)
+    expect(argh.size).to eq(3)
 
     json = TBD.inputs(surfaces, edges, argh)
     expect(TBD.status).to be_zero
     expect(TBD.logs).to be_empty
 
-    expect(argh.size).to eq(4)
+    expect(argh.size).to eq(5)
     expect(argh).to have_key(:option)
     expect(argh).to have_key(:setpoints)
+    expect(argh).to have_key(:parapet)
     expect(argh).to have_key(:io_path)
     expect(argh).to have_key(:schema_path)
 
     expect(argh[:option     ]).to eq("poor (BETBG)")
     expect(argh[:setpoints  ]).to be false
+    expect(argh[:parapet    ]).to be true
     expect(argh[:io_path    ]).to be_nil
     expect(argh[:schema_path]).to be_nil
 
@@ -955,97 +1138,222 @@ RSpec.describe TBD_Tests do
 
         # Evaluate current set content before processing a new linked surface.
         is               = {}
-        is[:head       ] = set.keys.to_s.include?("head")
-        is[:sill       ] = set.keys.to_s.include?("sill")
-        is[:jamb       ] = set.keys.to_s.include?("jamb")
-        is[:corner     ] = set.keys.to_s.include?("corner")
-        is[:parapet    ] = set.keys.to_s.include?("parapet")
-        is[:roof       ] = set.keys.to_s.include?("roof")
-        is[:party      ] = set.keys.to_s.include?("party")
-        is[:grade      ] = set.keys.to_s.include?("grade")
-        is[:balcony    ] = set.keys.to_s.include?("balcony")
-        is[:balconysill] = set.keys.to_s.include?("balconysill")
-        is[:rimjoist   ] = set.keys.to_s.include?("rimjoist")
+        is[:head        ] = set.keys.to_s.include?("head")
+        is[:sill        ] = set.keys.to_s.include?("sill")
+        is[:jamb        ] = set.keys.to_s.include?("jamb")
+        is[:doorhead    ] = set.keys.to_s.include?("doorhead")
+        is[:doorsill    ] = set.keys.to_s.include?("doorsill")
+        is[:doorjamb    ] = set.keys.to_s.include?("doorjamb")
+        is[:skylighthead] = set.keys.to_s.include?("skylighthead")
+        is[:skylightsill] = set.keys.to_s.include?("skylightsill")
+        is[:skylightjamb] = set.keys.to_s.include?("skylightjamb")
+        is[:spandrel    ] = set.keys.to_s.include?("spandrel")
+        is[:corner      ] = set.keys.to_s.include?("corner")
+        is[:parapet     ] = set.keys.to_s.include?("parapet")
+        is[:roof        ] = set.keys.to_s.include?("roof")
+        is[:party       ] = set.keys.to_s.include?("party")
+        is[:grade       ] = set.keys.to_s.include?("grade")
+        is[:balcony     ] = set.keys.to_s.include?("balcony")
+        is[:balconysill ] = set.keys.to_s.include?("balconysill")
+        is[:rimjoist    ] = set.keys.to_s.include?("rimjoist")
 
-        # Label edge as :head, :sill or :jamb if linked to:
-        #   1x subsurface
+        # Label edge as ...
+        #         :head,         :sill,         :jamb (vertical fenestration)
+        #     :doorhead,     :doorsill,     :doorjamb (opaque door)
+        # :skylighthead, :skylightsill, :skylightjamb (all other cases)
+        #
+        # ... if linked to:
+        #   1x subsurface (vertical or non-vertical)
         edge[:surfaces].keys.each do |i|
-          break    if is[:head] || is[:sill] || is[:jamb]
+          break    if is[:head        ]
+          break    if is[:sill        ]
+          break    if is[:jamb        ]
+          break    if is[:doorhead    ]
+          break    if is[:doorsill    ]
+          break    if is[:doorjamb    ]
+          break    if is[:skylighthead]
+          break    if is[:skylightsill]
+          break    if is[:skylightjamb]
           next     if deratables.include?(i)
           next unless holes.key?(i)
 
-          gardian = ""
-          gardian = id if deratables.size == 1 # just dad
+          # In most cases, subsurface edges simply delineate the rough opening
+          # of its base surface (here, a "gardian"). Door sills, corner windows,
+          # as well as a subsurface header aligned with a plenum "floor"
+          # (ceiling tiles), are common instances where a subsurface edge links
+          # 2x (opaque) surfaces. Deratable surface "id" may not be the gardian
+          # of subsurface "i" - the latter may be a neighbour. The single
+          # "target" surface to derate is not the gardian in such cases.
+          gardian = deratables.size == 1 ? id : ""
+          target  = gardian
 
-          if gardian.empty? # seek uncle
-            pops   = {} # kids?
-            uncles = {} # nieces?
-            boys   = [] # kids
-            nieces = [] # nieces
+          # Retrieve base surface's subsurfaces.
+          windows   = surfaces[id].key?(:windows)
+          doors     = surfaces[id].key?(:doors)
+          skylights = surfaces[id].key?(:skylights)
 
-            uncle  = deratables.first unless deratables.first == id # uncle #1?
-            uncle  = deratables.last  unless deratables.last  == id # uncle #2?
+          windows   =   windows ? surfaces[id][:windows  ] : {}
+          doors     =     doors ? surfaces[id][:doors    ] : {}
+          skylights = skylights ? surfaces[id][:skylights] : {}
 
-            pops[:w  ] = surfaces[id   ].key?(:windows)
-            pops[:d  ] = surfaces[id   ].key?(:doors)
-            pops[:s  ] = surfaces[id   ].key?(:skylights)
-            uncles[:w] = surfaces[uncle].key?(:windows)
-            uncles[:d] = surfaces[uncle].key?(:doors)
-            uncles[:s] = surfaces[uncle].key?(:skylights)
+          # The gardian is "id" if subsurface "ids" holds "i".
+          ids = windows.keys + doors.keys + skylights.keys
 
-            boys   += surfaces[id   ][:windows  ].keys if   pops[:w]
-            boys   += surfaces[id   ][:doors    ].keys if   pops[:d]
-            boys   += surfaces[id   ][:skylights].keys if   pops[:s]
-            nieces += surfaces[uncle][:windows  ].keys if uncles[:w]
-            nieces += surfaces[uncle][:doors    ].keys if uncles[:d]
-            nieces += surfaces[uncle][:skylights].keys if uncles[:s]
+          if gardian.empty?
+            other = deratables.first == id ? deratables.last : deratables.first
 
-            gardian = uncle if   boys.include?(i)
-            gardian = id    if nieces.include?(i)
+            gardian = ids.include?(i) ?    id : other
+            target  = ids.include?(i) ? other : id
+
+            windows   = surfaces[gardian].key?(:windows)
+            doors     = surfaces[gardian].key?(:doors)
+            skylights = surfaces[gardian].key?(:skylights)
+
+            windows   =   windows ? surfaces[gardian][:windows  ] : {}
+            doors     =     doors ? surfaces[gardian][:doors    ] : {}
+            skylights = skylights ? surfaces[gardian][:skylights] : {}
+
+            ids = windows.keys + doors.keys + skylights.keys
           end
 
-          next if gardian.empty?
+          unless ids.include?(i)
+            log(ERR, "Orphaned subsurface #{i} (mth)")
+            next
+          end
 
-          s1      = edge[:surfaces][gardian]
-          s2      = edge[:surfaces][i      ]
+          window   =   windows.key?(i) ?   windows[i] : {}
+          door     =     doors.key?(i) ?     doors[i] : {}
+          skylight = skylights.key?(i) ? skylights[i] : {}
+
+          sub = window   unless window.empty?
+          sub = door     unless door.empty?
+          sub = skylight unless skylight.empty?
+
+          window = sub[:type] == :window
+          door   = sub[:type] == :door
+          glazed = door && sub.key?(:glazed) && sub[:glazed]
+
+          s1      = edge[:surfaces][target]
+          s2      = edge[:surfaces][i     ]
           concave = TBD.concave?(s1, s2)
           convex  = TBD.convex?(s1, s2)
           flat    = !concave && !convex
-          # Subsurface edges are tagged as :head, :sill or :jamb, regardless
-          # of building PSI set subsurface tags. If the latter is simply
-          # :fenestration, then its (single) PSI value is systematically
-          # attributed to subsurface :head, :sill & :jamb edges. If absent,
-          # concave or convex variants also inherit from base type.
 
-          # TBD tags a subsurface edge as :jamb if the subsurface is "flat".
-          # If not flat, TBD tags a horizontal edge as either :head or :sill
-          # based on the polar angle of the subsurface around the edge vs sky
-          # zenith. Otherwise, all other subsurface edges are tagged as :jamb.
-          if ((s2[:normal].dot(zenith)).abs - 1).abs < TOL
-            set[:jamb       ] = shorts[:val][:jamb       ] if flat
-            set[:jambconcave] = shorts[:val][:jambconcave] if concave
-            set[:jambconvex ] = shorts[:val][:jambconvex ] if convex
-             is[:jamb       ] = true
-          else
-            if edge[:horizontal]
-              if s2[:polar].dot(zenith) < 0
-                set[:head       ] = shorts[:val][:head       ] if flat
-                set[:headconcave] = shorts[:val][:headconcave] if concave
-                set[:headconvex ] = shorts[:val][:headconvex ] if convex
-                 is[:head       ] = true
-              else
-                set[:sill       ] = shorts[:val][:sill       ] if flat
-                set[:sillconcave] = shorts[:val][:sillconcave] if concave
-                set[:sillconvex ] = shorts[:val][:sillconvex ] if convex
-                 is[:sill       ] = true
-              end
-            else
+          # Subsurface edges are tagged as head, sill or jamb, regardless of
+          # building PSI set subsurface-related tags. If the latter is simply
+          # :fenestration, then its single PSI factor is systematically
+          # assigned to e.g. a window's :head, :sill & :jamb edges.
+          #
+          # Additionally, concave or convex variants also inherit from the base
+          # type if undefined in the PSI set.
+          #
+          # If a subsurface is not horizontal, TBD tags any horizontal edge as
+          # either :head or :sill based on the polar angle of the subsurface
+          # around the edge vs sky zenith. Otherwise, all other subsurface edges
+          # are tagged as :jamb.
+          if ((s2[:normal].dot(zenith)).abs - 1).abs < TOL # horizontal surface
+            if glazed || window
               set[:jamb       ] = shorts[:val][:jamb       ] if flat
               set[:jambconcave] = shorts[:val][:jambconcave] if concave
               set[:jambconvex ] = shorts[:val][:jambconvex ] if convex
                is[:jamb       ] = true
+            elsif door
+              set[:doorjamb       ] = shorts[:val][:doorjamb       ] if flat
+              set[:doorjambconcave] = shorts[:val][:doorjambconcave] if concave
+              set[:doorjambconvex ] = shorts[:val][:doorjambconvex ] if convex
+               is[:doorjamb       ] = true
+            else
+              set[:skylightjamb       ] = shorts[:val][:skylightjamb       ] if flat
+              set[:skylightjambconcave] = shorts[:val][:skylightjambconcave] if concave
+              set[:skylightjambconvex ] = shorts[:val][:skylightjambconvex ] if convex
+               is[:skylightjamb       ] = true
+            end
+          else
+            if glazed || window
+              if edge[:horizontal]
+                if s2[:polar].dot(zenith) < 0
+                  set[:head       ] = shorts[:val][:head       ] if flat
+                  set[:headconcave] = shorts[:val][:headconcave] if concave
+                  set[:headconvex ] = shorts[:val][:headconvex ] if convex
+                   is[:head       ] = true
+                else
+                  set[:sill       ] = shorts[:val][:sill       ] if flat
+                  set[:sillconcave] = shorts[:val][:sillconcave] if concave
+                  set[:sillconvex ] = shorts[:val][:sillconvex ] if convex
+                   is[:sill       ] = true
+                end
+              else
+                set[:jamb       ] = shorts[:val][:jamb       ] if flat
+                set[:jambconcave] = shorts[:val][:jambconcave] if concave
+                set[:jambconvex ] = shorts[:val][:jambconvex ] if convex
+                 is[:jamb       ] = true
+              end
+            elsif door
+              if edge[:horizontal]
+                if s2[:polar].dot(zenith) < 0
+
+                  set[:doorhead       ] = shorts[:val][:doorhead       ] if flat
+                  set[:doorheadconcave] = shorts[:val][:doorheadconcave] if concave
+                  set[:doorheadconvex ] = shorts[:val][:doorheadconvex ] if convex
+                   is[:doorhead       ] = true
+                else
+                  set[:doorsill       ] = shorts[:val][:doorsill       ] if flat
+                  set[:doorsillconcave] = shorts[:val][:doorsillconcave] if concave
+                  set[:doorsillconvex ] = shorts[:val][:doorsillconvex ] if convex
+                   is[:doorsill       ] = true
+                end
+              else
+                set[:doorjamb       ] = shorts[:val][:doorjamb       ] if flat
+                set[:doorjambconcave] = shorts[:val][:doorjambconcave] if concave
+                set[:doorjambconvex ] = shorts[:val][:doorjambconvex ] if convex
+                 is[:doorjamb       ] = true
+              end
+            else
+              if edge[:horizontal]
+                if s2[:polar].dot(zenith) < 0
+                  set[:skylighthead       ] = shorts[:val][:skylighthead       ] if flat
+                  set[:skylightheadconcave] = shorts[:val][:skylightheadconcave] if concave
+                  set[:skylightheadconvex ] = shorts[:val][:skylightheadconvex ] if convex
+                   is[:skylighthead       ] = true
+                else
+                  set[:skylightsill       ] = shorts[:val][:skylightsill       ] if flat
+                  set[:skylightsillconcave] = shorts[:val][:skylightsillconcave] if concave
+                  set[:skylightsillconvex ] = shorts[:val][:skylightsillconvex ] if convex
+                   is[:skylightsill       ] = true
+                end
+              else
+                set[:skylightjamb       ] = shorts[:val][:skylightjamb       ] if flat
+                set[:skylightjambconcave] = shorts[:val][:skylightjambconcave] if concave
+                set[:skylightjambconvex ] = shorts[:val][:skylightjambconvex ] if convex
+                 is[:skylightjamb       ] = true
+              end
             end
           end
+        end
+
+        # Label edge as :spandrel if linked to:
+        #   1x deratable, non-spandrel wall
+        #   1x deratable, spandrel wall
+        edge[:surfaces].keys.each do |i|
+          break     if is[:spandrel]
+          break unless deratables.size == 2
+          break unless walls.key?(id)
+          break unless walls[id][:spandrel]
+          next      if i == id
+          next  unless deratables.include?(i)
+          next  unless walls.key?(i)
+          next      if walls[i][:spandrel]
+
+          s1      = edge[:surfaces][id]
+          s2      = edge[:surfaces][i ]
+          concave = TBD.concave?(s1, s2)
+          convex  = TBD.convex?(s1, s2)
+          flat    = !concave && !convex
+
+          set[:spandrel       ] = shorts[:val][:spandrel       ] if flat
+          set[:spandrelconcave] = shorts[:val][:spandrelconcave] if concave
+          set[:spandrelconvex ] = shorts[:val][:spandrelconvex ] if convex
+           is[:spandrel       ] = true
         end
 
         # Label edge as :cornerconcave or :cornerconvex if linked to:
@@ -1055,8 +1363,8 @@ RSpec.describe TBD_Tests do
           break unless deratables.size == 2
           break unless walls.key?(id)
           next      if i == id
-          next unless deratables.include?(i)
-          next unless walls.key?(i)
+          next  unless deratables.include?(i)
+          next  unless walls.key?(i)
 
           s1      = edge[:surfaces][id]
           s2      = edge[:surfaces][i ]
@@ -1068,11 +1376,12 @@ RSpec.describe TBD_Tests do
            is[:corner       ] = true
         end
 
-        # Label edge as :parapet if linked to:
+        # Label edge as :parapet/:roof if linked to:
         #   1x deratable wall
         #   1x deratable ceiling
         edge[:surfaces].keys.each do |i|
           break     if is[:parapet]
+          break     if is[:roof   ]
           break unless deratables.size == 2
           break unless ceilings.key?(id)
           next      if i == id
@@ -1085,15 +1394,17 @@ RSpec.describe TBD_Tests do
           convex  = TBD.convex?(s1, s2)
           flat    = !concave && !convex
 
-          set[:parapet       ] = shorts[:val][:parapet       ] if flat
-          set[:parapetconcave] = shorts[:val][:parapetconcave] if concave
-          set[:parapetconvex ] = shorts[:val][:parapetconvex ] if convex
-           is[:parapet       ] = true
-
-          # set[:roof          ] = shorts[:val][:roof          ] if flat
-          # set[:roofconcave   ] = shorts[:val][:roofconcave   ] if concave
-          # set[:roofconvex    ] = shorts[:val][:roofconvex    ] if convex
-          #   is[:roof         ] = true
+          if argh[:parapet]
+            set[:parapet       ] = shorts[:val][:parapet       ] if flat
+            set[:parapetconcave] = shorts[:val][:parapetconcave] if concave
+            set[:parapetconvex ] = shorts[:val][:parapetconvex ] if convex
+             is[:parapet       ] = true
+          else
+            set[:roof       ] = shorts[:val][:roof       ] if flat
+            set[:roofconcave] = shorts[:val][:roofconcave] if concave
+            set[:roofconvex ] = shorts[:val][:roofconvex ] if convex
+             is[:roof       ] = true
+          end
         end
 
         # Label edge as :party if linked to:
@@ -1125,41 +1436,39 @@ RSpec.describe TBD_Tests do
         # Label edge as :grade if linked to:
         #   1x surface (e.g. slab or wall) facing ground
         #   1x surface (i.e. wall) facing outdoors
-        unless is[:grade]
-          edge[:surfaces].keys.each do |i|
-            next     if is[:grade]
-            next     if i == id
-            next unless deratables.size == 1
-            next unless surfaces.key?(i)
-            next unless surfaces[i].key?(:ground)
-            next unless surfaces[i][:ground]
+        edge[:surfaces].keys.each do |i|
+          break     if is[:grade]
+          break unless deratables.size == 1
+          next      if i == id
+          next  unless surfaces.key?(i)
+          next  unless surfaces[i].key?(:ground)
+          next  unless surfaces[i][:ground]
 
-            s1      = edge[:surfaces][id]
-            s2      = edge[:surfaces][i ]
-            concave = TBD.concave?(s1, s2)
-            convex  = TBD.convex?(s1, s2)
-            flat    = !concave && !convex
+          s1      = edge[:surfaces][id]
+          s2      = edge[:surfaces][i]
+          concave = TBD.concave?(s1, s2)
+          convex  = TBD.convex?(s1, s2)
+          flat    = !concave && !convex
 
-            psi[:grade       ] = val[:grade       ] if flat
-            psi[:gradeconcave] = val[:gradeconcave] if concave
-            psi[:gradeconvex ] = val[:gradeconvex ] if convex
-             is[:grade       ] = true
-          end
+          set[:grade       ] = shorts[:val][:grade       ] if flat
+          set[:gradeconcave] = shorts[:val][:gradeconcave] if concave
+          set[:gradeconvex ] = shorts[:val][:gradeconvex ] if convex
+           is[:grade       ] = true
         end
 
-        # Label edge as :rimjoist (or :balcony) if linked to:
+        # Label edge as :rimjoist, :balcony or :balconysill if linked to:
         #   1x deratable surface
         #   1x CONDITIONED floor
         #   1x shade (optional)
         #   1x subsurface (optional)
-        balcony = false
+        balcony     = false
         balconysill = false
 
         edge[:surfaces].keys.each do |i|
           break if balcony
           next  if i == id
 
-          balcony = true if shades.key?(i)
+          balcony = shades.key?(i)
         end
 
         edge[:surfaces].keys.each do |i|
@@ -1232,7 +1541,7 @@ RSpec.describe TBD_Tests do
 
       next unless deratable
 
-      edge[:psi] = { transition: 0.0 }
+      edge[:psi] = { transition: 0.000 }
       edge[:set] = json[:io][:building][:psi]
 
       transitions[tag] = trnz unless trnz.empty?
@@ -1240,86 +1549,132 @@ RSpec.describe TBD_Tests do
 
     # Lo Scrigno: such transitions occur between plenum floor plates.
     expect(transitions).to_not be_empty
-    expect(transitions.size).to eq(4)
+    expect(transitions.size).to eq(10)
+    # transitions.values.each { |trr| puts "#{trr}\n" }
+    # ["p_E_floor" , "p_floor"   ] *
+    # ["p_W2_floor", "p_W1_floor"] +
+    # ["p_W4_floor", "p_W2_floor"] $
+    # ["p_floor"   , "p_W2_floor"] *
+    # ["p_floor"   , "p_W4_floor"] *
+    # ["p_floor"   , "p_W3_floor"] *
+    # ["p_W3_floor", "p_W4_floor"] $
+    # ["p_W3_floor", "p_W1_floor"] +
+    # ["g_S2_wall" , "g_S1_wall" ] !
+    # ["g_S3_wall" , "g_S2_wall" ] !
     w1_count = 0
 
     transitions.values.each do |trnz|
       expect(trnz.size).to eq(2)
 
-      if trnz.include?("p_W1_floor")
+      if trnz.include?("g_S2_wall")     # !
+        expect(trnz).to include("g_S1_wall").or include("g_S3_wall")
+      elsif trnz.include?("p_W1_floor") # +
         w1_count += 1
-        expect(trnz).to include("p_W2_floor")
-      else
-        expect(trnz).to include("p_floor")
-        expect(trnz).to include("p_W2_floor").or include("p_E_floor")
+        expect(trnz).to include("p_W2_floor").or include("p_W3_floor")
+      elsif trnz.include?("p_floor")    # *
+        expect(trnz).to_not include("p_W1_floor")
+      else                              # $
+        expect(trnz).to include("p_W4_floor")
       end
     end
 
     expect(w1_count).to eq(2)
 
-    n_derating_edges             = 0
-    n_edges_at_grade             = 0
-    n_edges_as_balconies         = 0
-    n_edges_as_balconysills      = 0
-    n_edges_as_parapets          = 0
-    n_edges_as_rimjoists         = 0
-    n_edges_as_concave_rimjoists = 0
-    n_edges_as_convex_rimjoists  = 0
-    n_edges_as_fenestrations     = 0
-    n_edges_as_heads             = 0
-    n_edges_as_sills             = 0
-    n_edges_as_jambs             = 0
-    n_edges_as_concave_jambs     = 0
-    n_edges_as_convex_jambs      = 0
-    n_edges_as_corners           = 0
-    n_edges_as_concave_corners   = 0
-    n_edges_as_convex_corners    = 0
-    n_edges_as_transitions       = 0
+    # At this stage, edges may have been tagged multiple times (e.g. :sill as
+    # well as :balconysill); TBD has yet to make final edge type determinations.
+    n_derating_edges                 = 0
+    n_edges_at_grade                 = 0
+    n_edges_as_balconies             = 0
+    n_edges_as_balconysills          = 0
+    n_edges_as_parapets              = 0
+    n_edges_as_rimjoists             = 0
+    n_edges_as_concave_rimjoists     = 0
+    n_edges_as_convex_rimjoists      = 0
+    n_edges_as_fenestrations         = 0
+    n_edges_as_heads                 = 0
+    n_edges_as_sills                 = 0
+    n_edges_as_jambs                 = 0
+    n_edges_as_concave_jambs         = 0
+    n_edges_as_convex_jambs          = 0
+    n_edges_as_doorheads             = 0
+    n_edges_as_doorsills             = 0
+    n_edges_as_doorjambs             = 0
+    n_edges_as_doorconcave_jambs     = 0
+    n_edges_as_doorconvex_jambs      = 0
+    n_edges_as_skylightheads         = 0
+    n_edges_as_skylightsills         = 0
+    n_edges_as_skylightjambs         = 0
+    n_edges_as_skylightconcave_jambs = 0
+    n_edges_as_skylightconvex_jambs  = 0
+    n_edges_as_corners               = 0
+    n_edges_as_concave_corners       = 0
+    n_edges_as_convex_corners        = 0
+    n_edges_as_transitions           = 0
 
     edges.values.each do |edge|
       next unless edge.key?(:psi)
 
-      n_derating_edges             += 1
-      n_edges_at_grade             += 1 if edge[:psi].key?(:grade)
-      n_edges_at_grade             += 1 if edge[:psi].key?(:gradeconcave)
-      n_edges_at_grade             += 1 if edge[:psi].key?(:gradeconvex)
-      n_edges_as_balconies         += 1 if edge[:psi].key?(:balcony)
-      n_edges_as_balconysills      += 1 if edge[:psi].key?(:balconysill)
-      n_edges_as_parapets          += 1 if edge[:psi].key?(:parapetconcave)
-      n_edges_as_parapets          += 1 if edge[:psi].key?(:parapetconvex)
-      n_edges_as_rimjoists         += 1 if edge[:psi].key?(:rimjoist)
-      n_edges_as_concave_rimjoists += 1 if edge[:psi].key?(:rimjoistconcave)
-      n_edges_as_convex_rimjoists  += 1 if edge[:psi].key?(:rimjoistconvex)
-      n_edges_as_fenestrations     += 1 if edge[:psi].key?(:fenestration)
-      n_edges_as_heads             += 1 if edge[:psi].key?(:head)
-      n_edges_as_sills             += 1 if edge[:psi].key?(:sill)
-      n_edges_as_jambs             += 1 if edge[:psi].key?(:jamb)
-      n_edges_as_concave_jambs     += 1 if edge[:psi].key?(:jambconcave)
-      n_edges_as_convex_jambs      += 1 if edge[:psi].key?(:jambconvex)
-      n_edges_as_corners           += 1 if edge[:psi].key?(:corner)
-      n_edges_as_concave_corners   += 1 if edge[:psi].key?(:cornerconcave)
-      n_edges_as_convex_corners    += 1 if edge[:psi].key?(:cornerconvex)
-      n_edges_as_transitions       += 1 if edge[:psi].key?(:transition)
+      n_derating_edges                 += 1
+      n_edges_at_grade                 += 1 if edge[:psi].key?(:grade)
+      n_edges_at_grade                 += 1 if edge[:psi].key?(:gradeconcave)
+      n_edges_at_grade                 += 1 if edge[:psi].key?(:gradeconvex)
+      n_edges_as_balconies             += 1 if edge[:psi].key?(:balcony)
+      n_edges_as_balconysills          += 1 if edge[:psi].key?(:balconysill)
+      n_edges_as_parapets              += 1 if edge[:psi].key?(:parapetconcave)
+      n_edges_as_parapets              += 1 if edge[:psi].key?(:parapetconvex)
+      n_edges_as_rimjoists             += 1 if edge[:psi].key?(:rimjoist)
+      n_edges_as_concave_rimjoists     += 1 if edge[:psi].key?(:rimjoistconcave)
+      n_edges_as_convex_rimjoists      += 1 if edge[:psi].key?(:rimjoistconvex)
+      n_edges_as_fenestrations         += 1 if edge[:psi].key?(:fenestration)
+      n_edges_as_heads                 += 1 if edge[:psi].key?(:head)
+      n_edges_as_sills                 += 1 if edge[:psi].key?(:sill)
+      n_edges_as_jambs                 += 1 if edge[:psi].key?(:jamb)
+      n_edges_as_concave_jambs         += 1 if edge[:psi].key?(:jambconcave)
+      n_edges_as_convex_jambs          += 1 if edge[:psi].key?(:jambconvex)
+      n_edges_as_doorheads             += 1 if edge[:psi].key?(:doorhead)
+      n_edges_as_doorsills             += 1 if edge[:psi].key?(:doorsill)
+      n_edges_as_doorjambs             += 1 if edge[:psi].key?(:doorjamb)
+      n_edges_as_doorconcave_jambs     += 1 if edge[:psi].key?(:doorjambconcave)
+      n_edges_as_doorconvex_jambs      += 1 if edge[:psi].key?(:doorjambconvex)
+      n_edges_as_skylightheads         += 1 if edge[:psi].key?(:skylighthead)
+      n_edges_as_skylightsills         += 1 if edge[:psi].key?(:skylightsill)
+      n_edges_as_skylightjambs         += 1 if edge[:psi].key?(:skylightjamb)
+      n_edges_as_skylightconcave_jambs += 1 if edge[:psi].key?(:skylightjambconcave)
+      n_edges_as_skylightconvex_jambs  += 1 if edge[:psi].key?(:skylightjambconvex)
+      n_edges_as_corners               += 1 if edge[:psi].key?(:corner)
+      n_edges_as_concave_corners       += 1 if edge[:psi].key?(:cornerconcave)
+      n_edges_as_convex_corners        += 1 if edge[:psi].key?(:cornerconvex)
+      n_edges_as_transitions           += 1 if edge[:psi].key?(:transition)
     end
 
-    expect(n_derating_edges            ).to eq(66)
-    expect(n_edges_at_grade            ).to eq( 0)
-    expect(n_edges_as_balconies        ).to eq( 2) # not balconysills
-    expect(n_edges_as_balconysills     ).to eq( 2) # == sills
-    expect(n_edges_as_parapets         ).to eq( 8)
-    expect(n_edges_as_rimjoists        ).to eq( 5)
-    expect(n_edges_as_concave_rimjoists).to eq( 5)
-    expect(n_edges_as_convex_rimjoists ).to eq(18)
-    expect(n_edges_as_fenestrations    ).to eq( 0)
-    expect(n_edges_as_heads            ).to eq( 2)
-    expect(n_edges_as_sills            ).to eq( 2) # == balcony sills
-    expect(n_edges_as_jambs            ).to eq( 4)
-    expect(n_edges_as_concave_jambs    ).to eq( 0)
-    expect(n_edges_as_convex_jambs     ).to eq( 4) # 4x edges around skylight
-    expect(n_edges_as_corners          ).to eq( 0)
-    expect(n_edges_as_concave_corners  ).to eq( 4)
-    expect(n_edges_as_convex_corners   ).to eq(12)
-    expect(n_edges_as_transitions      ).to eq( 4)
+    expect(n_derating_edges                ).to eq(77)
+    expect(n_edges_at_grade                ).to eq( 0)
+    expect(n_edges_as_balconies            ).to eq( 2) # not balconysills
+    expect(n_edges_as_balconysills         ).to eq( 2) # == sills
+    expect(n_edges_as_parapets             ).to eq(12) # 5x around rooftop strip
+    expect(n_edges_as_rimjoists            ).to eq( 5)
+    expect(n_edges_as_concave_rimjoists    ).to eq( 5)
+    expect(n_edges_as_convex_rimjoists     ).to eq(18)
+    expect(n_edges_as_fenestrations        ).to eq( 0)
+    expect(n_edges_as_heads                ).to eq( 2) # "vertical fenestration"
+    expect(n_edges_as_sills                ).to eq( 2) # == balcony sills
+    expect(n_edges_as_jambs                ).to eq( 4)
+    expect(n_edges_as_concave_jambs        ).to eq( 0)
+    expect(n_edges_as_convex_jambs         ).to eq( 0)
+    expect(n_edges_as_doorheads            ).to eq( 0) # "vertical fenestration"
+    expect(n_edges_as_doorsills            ).to eq( 0) # "vertical fenestration"
+    expect(n_edges_as_doorjambs            ).to eq( 0) # "vertical fenestration"
+    expect(n_edges_as_doorconcave_jambs    ).to eq( 0) # "vertical fenestration"
+    expect(n_edges_as_doorconvex_jambs     ).to eq( 0) # "vertical fenestration"
+    expect(n_edges_as_skylightheads        ).to eq( 0)
+    expect(n_edges_as_skylightsills        ).to eq( 0)
+    expect(n_edges_as_skylightjambs        ).to eq( 1) # along 1" rooftop strip
+    expect(n_edges_as_skylightconcave_jambs).to eq( 0)
+    expect(n_edges_as_skylightconvex_jambs ).to eq( 3) # 3x parapet edges
+    expect(n_edges_as_corners              ).to eq( 0)
+    expect(n_edges_as_concave_corners      ).to eq( 4)
+    expect(n_edges_as_convex_corners       ).to eq(12)
+    expect(n_edges_as_transitions          ).to eq(10)
 
     # Loop through each edge and assign heat loss to linked surfaces.
     edges.each do |identifier, edge|
@@ -1393,31 +1748,40 @@ RSpec.describe TBD_Tests do
       e.each { |edge| surface[:heatloss] += edge[:psi] * edge[:length] }
     end
 
-    expect(n_surfaces_to_derate).to eq(22) # if "poor (BETBG)"
+    expect(n_surfaces_to_derate).to eq(27) # if "poor (BETBG)"
+
+    ["e_p_wall", "g_floor", "p_top", "p_e_wall"].each do |id|
+      expect(surfaces[id]).to_not have_key(:heatloss)
+    end
 
     # If "poor (BETBG)".
-    expect(surfaces["s_floor"   ][:heatloss]).to be_within(TOL).of( 8.800)
-    expect(surfaces["s_E_wall"  ][:heatloss]).to be_within(TOL).of( 5.041)
-    expect(surfaces["p_E_floor" ][:heatloss]).to be_within(TOL).of(18.650)
-    expect(surfaces["s_S_wall"  ][:heatloss]).to be_within(TOL).of( 6.583)
-    expect(surfaces["e_W_wall"  ][:heatloss]).to be_within(TOL).of( 6.023)
-    expect(surfaces["p_N_wall"  ][:heatloss]).to be_within(TOL).of(37.250)
-    expect(surfaces["p_S2_wall" ][:heatloss]).to be_within(TOL).of(27.268)
-    expect(surfaces["p_S1_wall" ][:heatloss]).to be_within(TOL).of( 7.063)
-    expect(surfaces["g_S_wall"  ][:heatloss]).to be_within(TOL).of(56.150)
-    expect(surfaces["p_floor"   ][:heatloss]).to be_within(TOL).of(10.000)
-    expect(surfaces["p_W1_floor"][:heatloss]).to be_within(TOL).of(13.775)
-    expect(surfaces["e_N_wall"  ][:heatloss]).to be_within(TOL).of( 4.727)
-    expect(surfaces["s_N_wall"  ][:heatloss]).to be_within(TOL).of( 6.583)
-    expect(surfaces["g_E_wall"  ][:heatloss]).to be_within(TOL).of(18.195)
-    expect(surfaces["e_S_wall"  ][:heatloss]).to be_within(TOL).of( 7.703)
-    expect(surfaces["e_top"     ][:heatloss]).to be_within(TOL).of( 4.400)
-    expect(surfaces["s_W_wall"  ][:heatloss]).to be_within(TOL).of( 5.670)
-    expect(surfaces["e_E_wall"  ][:heatloss]).to be_within(TOL).of( 6.023)
-    expect(surfaces["e_floor"   ][:heatloss]).to be_within(TOL).of( 8.007)
-    expect(surfaces["g_W_wall"  ][:heatloss]).to be_within(TOL).of(18.195)
-    expect(surfaces["g_N_wall"  ][:heatloss]).to be_within(TOL).of(54.255)
-    expect(surfaces["p_W2_floor"][:heatloss]).to be_within(TOL).of(13.729)
+    expect(surfaces["e_E_wall"  ][:heatloss]).to be_within(TOL).of( 6.02)
+    expect(surfaces["e_N_wall"  ][:heatloss]).to be_within(TOL).of( 4.73)
+    expect(surfaces["e_S_wall"  ][:heatloss]).to be_within(TOL).of( 7.70)
+    expect(surfaces["e_W_wall"  ][:heatloss]).to be_within(TOL).of( 6.02)
+    expect(surfaces["e_floor"   ][:heatloss]).to be_within(TOL).of( 8.01)
+    expect(surfaces["e_top"     ][:heatloss]).to be_within(TOL).of( 4.40)
+    expect(surfaces["g_E_wall"  ][:heatloss]).to be_within(TOL).of(18.19)
+    expect(surfaces["g_N_wall"  ][:heatloss]).to be_within(TOL).of(54.25)
+    expect(surfaces["g_S1_wall" ][:heatloss]).to be_within(TOL).of( 9.43)
+    expect(surfaces["g_S2_wall" ][:heatloss]).to be_within(TOL).of( 3.20)
+    expect(surfaces["g_S3_wall" ][:heatloss]).to be_within(TOL).of(28.88)
+    expect(surfaces["g_W_wall"  ][:heatloss]).to be_within(TOL).of(18.19)
+    expect(surfaces["g_top"     ][:heatloss]).to be_within(TOL).of(32.96)
+    expect(surfaces["p_E_floor" ][:heatloss]).to be_within(TOL).of(18.65)
+    expect(surfaces["p_N_wall"  ][:heatloss]).to be_within(TOL).of(37.25)
+    expect(surfaces["p_S1_wall" ][:heatloss]).to be_within(TOL).of( 7.06)
+    expect(surfaces["p_S2_wall" ][:heatloss]).to be_within(TOL).of(27.27)
+    expect(surfaces["p_W1_floor"][:heatloss]).to be_within(TOL).of(13.77)
+    expect(surfaces["p_W2_floor"][:heatloss]).to be_within(TOL).of( 5.92)
+    expect(surfaces["p_W3_floor"][:heatloss]).to be_within(TOL).of( 5.92)
+    expect(surfaces["p_W4_floor"][:heatloss]).to be_within(TOL).of( 1.90)
+    expect(surfaces["p_floor"   ][:heatloss]).to be_within(TOL).of(10.00)
+    expect(surfaces["s_E_wall"  ][:heatloss]).to be_within(TOL).of( 5.04)
+    expect(surfaces["s_N_wall"  ][:heatloss]).to be_within(TOL).of( 6.58)
+    expect(surfaces["s_S_wall"  ][:heatloss]).to be_within(TOL).of( 6.58)
+    expect(surfaces["s_W_wall"  ][:heatloss]).to be_within(TOL).of( 5.68)
+    expect(surfaces["s_floor"   ][:heatloss]).to be_within(TOL).of( 8.80)
 
     surfaces.each do |id, surface|
       next unless surface.key?(:construction)
@@ -1471,7 +1835,6 @@ RSpec.describe TBD_Tests do
       expect(s.get.construction.get.nameString).to include(" tbd")
     end
 
-    # testing
     ceilings.each do |id, ceiling|
       next unless ceiling.key?(:edges)
 
@@ -1481,7 +1844,6 @@ RSpec.describe TBD_Tests do
       expect(s.get.construction.get.nameString).to include(" tbd")
     end
 
-    # testing
     walls.each do |id, wall|
       next unless wall.key?(:edges)
 
@@ -1496,6 +1858,9 @@ RSpec.describe TBD_Tests do
     translator = OpenStudio::OSVersion::VersionTranslator.new
     TBD.clean!
 
+    # "Lo Scrigno" (or Jewel Box), by Renzo Piano (Lingotto Factory, Turin); a
+    # cantilevered, single space art gallery (space #1) above a supply plenum
+    # with slanted undersides (space #2) resting on four main pillars.
     file  = File.join(__dir__, "files/osms/out/loscrigno.osm")
     path  = OpenStudio::Path.new(file)
     model = translator.loadModel(path)
@@ -1513,16 +1878,18 @@ RSpec.describe TBD_Tests do
     expect(TBD.status).to be_zero
     expect(TBD.logs).to be_empty
     expect(surfaces).to be_a Hash
-    expect(surfaces.size).to eq(27)
+    expect(surfaces.size).to eq(31)
     expect(io).to be_a(Hash)
     expect(io).to have_key(:edges)
-    expect(io[:edges].size).to eq(66)
+    expect(io[:edges].size).to eq(77)
 
     n_edges_at_grade             = 0
     n_edges_as_balconies         = 0
     n_edges_as_balconysills      = 0
     n_edges_as_concave_parapets  = 0
     n_edges_as_convex_parapets   = 0
+    n_edges_as_concave_roofs     = 0
+    n_edges_as_convex_roofs      = 0
     n_edges_as_rimjoists         = 0
     n_edges_as_concave_rimjoists = 0
     n_edges_as_convex_rimjoists  = 0
@@ -1530,6 +1897,10 @@ RSpec.describe TBD_Tests do
     n_edges_as_heads             = 0
     n_edges_as_sills             = 0
     n_edges_as_jambs             = 0
+    n_edges_as_doorheads         = 0
+    n_edges_as_doorsills         = 0
+    n_edges_as_doorjambs         = 0
+    n_edges_as_skylightjambs     = 0
     n_edges_as_concave_jambs     = 0
     n_edges_as_convex_jambs      = 0
     n_edges_as_corners           = 0
@@ -1551,6 +1922,8 @@ RSpec.describe TBD_Tests do
       n_edges_as_balconysills      += 1 if edge[:type] == :balconysillconvex
       n_edges_as_concave_parapets  += 1 if edge[:type] == :parapetconcave
       n_edges_as_convex_parapets   += 1 if edge[:type] == :parapetconvex
+      n_edges_as_concave_roofs     += 1 if edge[:type] == :roofconcave
+      n_edges_as_convex_roofs      += 1 if edge[:type] == :roofconvex
       n_edges_as_rimjoists         += 1 if edge[:type] == :rimjoist
       n_edges_as_concave_rimjoists += 1 if edge[:type] == :rimjoistconcave
       n_edges_as_convex_rimjoists  += 1 if edge[:type] == :rimjoistconvex
@@ -1564,6 +1937,227 @@ RSpec.describe TBD_Tests do
       n_edges_as_jambs             += 1 if edge[:type] == :jamb
       n_edges_as_concave_jambs     += 1 if edge[:type] == :jambconcave
       n_edges_as_convex_jambs      += 1 if edge[:type] == :jambconvex
+      n_edges_as_doorheads         += 1 if edge[:type] == :doorhead
+      n_edges_as_doorsills         += 1 if edge[:type] == :doorsill
+      n_edges_as_doorjambs         += 1 if edge[:type] == :doorjamb
+      n_edges_as_skylightjambs     += 1 if edge[:type] == :skylightjamb
+      n_edges_as_skylightjambs     += 1 if edge[:type] == :skylightjambconvex
+      n_edges_as_corners           += 1 if edge[:type] == :corner
+      n_edges_as_concave_corners   += 1 if edge[:type] == :cornerconcave
+      n_edges_as_convex_corners    += 1 if edge[:type] == :cornerconvex
+      n_edges_as_transitions       += 1 if edge[:type] == :transition
+    end
+
+    # Lo Scrigno holds 8x wall/roof edges:
+    #   - 4x along gallery roof/skylight (all convex)
+    #   - 4x along the elevator roof (3x convex + 1x concave)
+    #
+    # The gallery wall/roof edges are not modelled here "as built", but rather
+    # closer to details of another Renzo Piano extension: the Modern Wing of the
+    # Art Institute of Chicago. Both galleries are similar in that daylighting
+    # is zenithal, covering all (or nearly all) of the roof surface. In the
+    # case of Chicago, the roof is ~entirely glazed (as reflected in the model).
+    #
+    # www.archdaily.com/24652/the-modern-wing-renzo-piano/
+    # 5010473228ba0d42220015f8-the-modern-wing-renzo-piano-image?next_project=no
+    #
+    # However, a small 1" strip is maintained along the South roof/wall edge of
+    # the gallery to ensure skylight area < roof area.
+    #
+    # No judgement here on the suitability of the design for either Chicago or
+    # Turin. The model nonetheless remains an interesting (~extreme) test case
+    # for TBD. Except along the South parapet, the transition from "wall-to-roof"
+    # and "roof-to-skylight" are one and the same. So is the edge a :skylight
+    # edge? or a :parapet (or :roof) edge? They're both. In such cases, the final
+    # selection in TBD is based on the greatest PSI factor. In ASHRAE 90.1 2022,
+    # only "vertical fenestration" edge PSI factors are explicitely
+    # stated/published. For this reason, the 8x TBD-built-in ASHRAE PSI sets
+    # have 0 W/K per meter assigned for any non-regulated edge, e.g.:
+    #
+    #   - skylight perimeters
+    #   - non-fenestrated door perimeters
+    #   - corners
+    #
+    # There are (possibly) 2x admissible interpretations of how to treat
+    # non-regulated heat losss (edges as linear thermal bridges) in 90.1:
+    #   1. assign 0 W/K•m for both proposed design and budget building models
+    #   2. assign more realistic PSi factors, equally to both proposed/budget
+    #
+    # In both cases, the treatment of non-regulated heat loss remains "neutral"
+    # between both proposed design and budget building models. Option #2 remains
+    # closer to reality (more heat loss in winter, likely more heat gain in
+    # summer), which is preferable for HVAC autosizing. Yet 90.1 (2022) ECB
+    # doesn't seem to afford this type of flexibility, contrary to the "neutral"
+    # treatment of (non-regulated) miscellaneous (process) loads. So for now,
+    # TBD's built-in ASHRAE 90.1 2022 (A10) PSI factor sets recflect option #1.
+    #
+    # Users who choose option #2 can always write up a custom ASHRAE 90.1 (A10)
+    # PSI factor set on file (tbd.json), initially based on the built-in 90.1
+    # sets while resetting non-zero PSI factors.
+    expect(n_edges_at_grade            ).to eq( 0)
+    expect(n_edges_as_balconies        ).to eq( 2)
+    expect(n_edges_as_balconysills     ).to eq( 2) # (2x instances of GlassDoor)
+    expect(n_edges_as_concave_parapets ).to eq( 1)
+    expect(n_edges_as_convex_parapets  ).to eq(11)
+    expect(n_edges_as_concave_roofs    ).to eq( 0)
+    expect(n_edges_as_convex_roofs     ).to eq( 0)
+    expect(n_edges_as_rimjoists        ).to eq( 5)
+    expect(n_edges_as_concave_rimjoists).to eq( 5)
+    expect(n_edges_as_convex_rimjoists ).to eq(18)
+    expect(n_edges_as_fenestrations    ).to eq( 0)
+    expect(n_edges_as_heads            ).to eq( 2) # GlassDoor == fenestration
+    expect(n_edges_as_sills            ).to eq( 0) # (2x balconysills)
+    expect(n_edges_as_jambs            ).to eq( 4)
+    expect(n_edges_as_concave_jambs    ).to eq( 0)
+    expect(n_edges_as_convex_jambs     ).to eq( 0)
+    expect(n_edges_as_doorheads        ).to eq( 0)
+    expect(n_edges_as_doorjambs        ).to eq( 0)
+    expect(n_edges_as_doorsills        ).to eq( 0)
+    expect(n_edges_as_skylightjambs    ).to eq( 1) # along 1" rooftop strip
+    expect(n_edges_as_corners          ).to eq( 0)
+    expect(n_edges_as_concave_corners  ).to eq( 4)
+    expect(n_edges_as_convex_corners   ).to eq(12)
+    expect(n_edges_as_transitions      ).to eq(10)
+
+    # For the purposes of the RSpec, vertical access (elevator and stairs,
+    # normally fully glazed) are modelled as (opaque) extensions of either
+    # space. Deratable (exterior) surfaces are grouped, prefixed as follows:
+    #
+    #   - "g_" : art gallery
+    #   - "p_" : underfloor plenum (supplying gallery)
+    #   - "s_" : stairwell (leading to/through plenum & gallery)
+    #   - "e_" : (side) elevator leading to gallery
+    #
+    # East vs West walls have equal heat loss (W/K) from major thermal bridging
+    # as they are symmetrical. North vs South walls differ slightly due to:
+    #   - adjacency with elevator walls
+    #   - different balcony lengths
+    expect(surfaces["g_E_wall"  ][:heatloss]).to be_within(TOL).of( 4.30)
+    expect(surfaces["g_W_wall"  ][:heatloss]).to be_within(TOL).of( 4.30)
+    expect(surfaces["g_N_wall"  ][:heatloss]).to be_within(TOL).of(15.95)
+    expect(surfaces["g_S1_wall" ][:heatloss]).to be_within(TOL).of( 1.87)
+    expect(surfaces["g_S2_wall" ][:heatloss]).to be_within(TOL).of( 1.04)
+    expect(surfaces["g_S3_wall" ][:heatloss]).to be_within(TOL).of( 8.19)
+
+    expect(surfaces["e_top"     ][:heatloss]).to be_within(TOL).of( 1.43)
+    expect(surfaces["e_E_wall"  ][:heatloss]).to be_within(TOL).of( 0.32)
+    expect(surfaces["e_W_wall"  ][:heatloss]).to be_within(TOL).of( 0.32)
+    expect(surfaces["e_N_wall"  ][:heatloss]).to be_within(TOL).of( 0.95)
+    expect(surfaces["e_S_wall"  ][:heatloss]).to be_within(TOL).of( 0.85)
+    expect(surfaces["e_floor"   ][:heatloss]).to be_within(TOL).of( 2.46)
+
+    expect(surfaces["s_E_wall"  ][:heatloss]).to be_within(TOL).of( 1.17)
+    expect(surfaces["s_W_wall"  ][:heatloss]).to be_within(TOL).of( 1.17)
+    expect(surfaces["s_N_wall"  ][:heatloss]).to be_within(TOL).of( 1.54)
+    expect(surfaces["s_S_wall"  ][:heatloss]).to be_within(TOL).of( 1.54)
+    expect(surfaces["s_floor"   ][:heatloss]).to be_within(TOL).of( 2.70)
+
+    expect(surfaces["p_W1_floor"][:heatloss]).to be_within(TOL).of( 4.23)
+    expect(surfaces["p_W2_floor"][:heatloss]).to be_within(TOL).of( 1.82)
+    expect(surfaces["p_W3_floor"][:heatloss]).to be_within(TOL).of( 1.82)
+    expect(surfaces["p_W4_floor"][:heatloss]).to be_within(TOL).of( 0.58)
+    expect(surfaces["p_E_floor" ][:heatloss]).to be_within(TOL).of( 5.73)
+    expect(surfaces["p_N_wall"  ][:heatloss]).to be_within(TOL).of(11.44)
+    expect(surfaces["p_S2_wall" ][:heatloss]).to be_within(TOL).of( 8.16)
+    expect(surfaces["p_S1_wall" ][:heatloss]).to be_within(TOL).of( 2.04)
+    expect(surfaces["p_floor"   ][:heatloss]).to be_within(TOL).of( 3.07)
+
+    expect(argh).to have_key(:io)
+    out  = JSON.pretty_generate(argh[:io])
+    outP = File.join(__dir__, "../json/tbd_loscrigno1.out.json")
+    File.open(outP, "w") { |outP| outP.puts out }
+  end
+
+  it "can switch between parapet/roof edge types" do
+    translator = OpenStudio::OSVersion::VersionTranslator.new
+    TBD.clean!
+
+    file  = File.join(__dir__, "files/osms/out/loscrigno.osm")
+    path  = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model).to_not be_empty
+    model = model.get
+
+    # Switching wall/roof edges from/to:
+    #    - "parapet" PSI factor 0.26 W/K•m
+    #    - "roof"    PSI factor 0.02 W/K•m !!
+    #
+    # ... as per 90.1 2022 (non-"parapet" admisible thresholds are much lower).
+    argh = {option: "90.1.22|steel.m|default", parapet: false}
+
+    json     = TBD.process(model, argh)
+    expect(json).to be_a(Hash)
+    expect(json).to have_key(:io)
+    expect(json).to have_key(:surfaces)
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+    expect(TBD.status).to be_zero
+    expect(TBD.logs).to be_empty
+    expect(surfaces).to be_a Hash
+    expect(surfaces.size).to eq(31)
+    expect(io).to be_a(Hash)
+    expect(io).to have_key(:edges)
+    expect(io[:edges].size).to eq(77)
+
+    n_edges_at_grade             = 0
+    n_edges_as_balconies         = 0
+    n_edges_as_balconysills      = 0
+    n_edges_as_concave_parapets  = 0
+    n_edges_as_convex_parapets   = 0
+    n_edges_as_concave_roofs     = 0
+    n_edges_as_convex_roofs      = 0
+    n_edges_as_rimjoists         = 0
+    n_edges_as_concave_rimjoists = 0
+    n_edges_as_convex_rimjoists  = 0
+    n_edges_as_fenestrations     = 0
+    n_edges_as_heads             = 0
+    n_edges_as_sills             = 0
+    n_edges_as_jambs             = 0
+    n_edges_as_doorheads         = 0
+    n_edges_as_doorsills         = 0
+    n_edges_as_doorjambs         = 0
+    n_edges_as_skylightjambs     = 0
+    n_edges_as_concave_jambs     = 0
+    n_edges_as_convex_jambs      = 0
+    n_edges_as_corners           = 0
+    n_edges_as_concave_corners   = 0
+    n_edges_as_convex_corners    = 0
+    n_edges_as_transitions       = 0
+
+    io[:edges].each do |edge|
+      expect(edge).to have_key(:type)
+
+      n_edges_at_grade             += 1 if edge[:type] == :grade
+      n_edges_at_grade             += 1 if edge[:type] == :gradeconcave
+      n_edges_at_grade             += 1 if edge[:type] == :gradeconvex
+      n_edges_as_balconies         += 1 if edge[:type] == :balcony
+      n_edges_as_balconies         += 1 if edge[:type] == :balconyconcave
+      n_edges_as_balconies         += 1 if edge[:type] == :balconyconvex
+      n_edges_as_balconysills      += 1 if edge[:type] == :balconysill
+      n_edges_as_balconysills      += 1 if edge[:type] == :balconysillconcave
+      n_edges_as_balconysills      += 1 if edge[:type] == :balconysillconvex
+      n_edges_as_concave_parapets  += 1 if edge[:type] == :parapetconcave
+      n_edges_as_convex_parapets   += 1 if edge[:type] == :parapetconvex
+      n_edges_as_concave_roofs     += 1 if edge[:type] == :roofconcave
+      n_edges_as_convex_roofs      += 1 if edge[:type] == :roofconvex
+      n_edges_as_rimjoists         += 1 if edge[:type] == :rimjoist
+      n_edges_as_concave_rimjoists += 1 if edge[:type] == :rimjoistconcave
+      n_edges_as_convex_rimjoists  += 1 if edge[:type] == :rimjoistconvex
+      n_edges_as_fenestrations     += 1 if edge[:type] == :fenestration
+      n_edges_as_heads             += 1 if edge[:type] == :head
+      n_edges_as_heads             += 1 if edge[:type] == :headconcave
+      n_edges_as_heads             += 1 if edge[:type] == :headconvex
+      n_edges_as_sills             += 1 if edge[:type] == :sill
+      n_edges_as_sills             += 1 if edge[:type] == :sillconcave
+      n_edges_as_sills             += 1 if edge[:type] == :sillconvex
+      n_edges_as_jambs             += 1 if edge[:type] == :jamb
+      n_edges_as_concave_jambs     += 1 if edge[:type] == :jambconcave
+      n_edges_as_convex_jambs      += 1 if edge[:type] == :jambconvex
+      n_edges_as_doorheads         += 1 if edge[:type] == :doorhead
+      n_edges_as_doorsills         += 1 if edge[:type] == :doorsill
+      n_edges_as_doorjambs         += 1 if edge[:type] == :doorjamb
+      n_edges_as_skylightjambs     += 1 if edge[:type] == :skylightjamb
+      n_edges_as_skylightjambs     += 1 if edge[:type] == :skylightjambconvex
       n_edges_as_corners           += 1 if edge[:type] == :corner
       n_edges_as_concave_corners   += 1 if edge[:type] == :cornerconcave
       n_edges_as_convex_corners    += 1 if edge[:type] == :cornerconvex
@@ -1572,46 +2166,68 @@ RSpec.describe TBD_Tests do
 
     expect(n_edges_at_grade            ).to eq( 0)
     expect(n_edges_as_balconies        ).to eq( 2)
-    expect(n_edges_as_balconysills     ).to eq( 2)
-    expect(n_edges_as_concave_parapets ).to eq( 1)
-    expect(n_edges_as_convex_parapets  ).to eq( 7)
+    expect(n_edges_as_balconysills     ).to eq( 2) # (2x instances of GlassDoor)
+    expect(n_edges_as_concave_parapets ).to eq( 0) #  1x if parapet (not roof)
+    expect(n_edges_as_convex_parapets  ).to eq( 0) # 11x if parapet (not roof)
+    expect(n_edges_as_concave_roofs    ).to eq( 1)
+    expect(n_edges_as_convex_roofs     ).to eq(11)
     expect(n_edges_as_rimjoists        ).to eq( 5)
     expect(n_edges_as_concave_rimjoists).to eq( 5)
     expect(n_edges_as_convex_rimjoists ).to eq(18)
     expect(n_edges_as_fenestrations    ).to eq( 0)
-    expect(n_edges_as_heads            ).to eq( 2)
-    expect(n_edges_as_sills            ).to eq( 0) # balcony sills instead
+    expect(n_edges_as_heads            ).to eq( 2) # GlassDoor == fenestration
+    expect(n_edges_as_sills            ).to eq( 0) # (2x balconysills)
     expect(n_edges_as_jambs            ).to eq( 4)
     expect(n_edges_as_concave_jambs    ).to eq( 0)
     expect(n_edges_as_convex_jambs     ).to eq( 0)
+    expect(n_edges_as_doorheads        ).to eq( 0)
+    expect(n_edges_as_doorjambs        ).to eq( 0)
+    expect(n_edges_as_doorsills        ).to eq( 0)
+    expect(n_edges_as_skylightjambs    ).to eq( 1) # along 1" rooftop strip
     expect(n_edges_as_corners          ).to eq( 0)
     expect(n_edges_as_concave_corners  ).to eq( 4)
     expect(n_edges_as_convex_corners   ).to eq(12)
-    expect(n_edges_as_transitions      ).to eq( 4)
+    expect(n_edges_as_transitions      ).to eq(10)
 
-    # "90.1.22|steel.m|default" vs "poor (BETBG)".
-    expect(surfaces["s_floor"   ][:heatloss]).to be_within(TOL).of( 2.700) # 8.800
-    expect(surfaces["s_E_wall"  ][:heatloss]).to be_within(TOL).of( 1.170) # 5.041
-    expect(surfaces["p_E_floor" ][:heatloss]).to be_within(TOL).of( 5.730) #18.650
-    expect(surfaces["s_S_wall"  ][:heatloss]).to be_within(TOL).of( 1.540) # 6.583
-    expect(surfaces["e_W_wall"  ][:heatloss]).to be_within(TOL).of( 0.320) # 6.023
-    expect(surfaces["p_N_wall"  ][:heatloss]).to be_within(TOL).of(11.440) #37.250
-    expect(surfaces["p_S2_wall" ][:heatloss]).to be_within(TOL).of( 8.160) #27.268
-    expect(surfaces["p_S1_wall" ][:heatloss]).to be_within(TOL).of( 2.040) # 7.063
-    expect(surfaces["g_S_wall"  ][:heatloss]).to be_within(TOL).of(15.860) #56.150
-    expect(surfaces["p_floor"   ][:heatloss]).to be_within(TOL).of( 3.070) #10.000
-    expect(surfaces["p_W1_floor"][:heatloss]).to be_within(TOL).of( 4.230) #13.775
-    expect(surfaces["e_N_wall"  ][:heatloss]).to be_within(TOL).of( 0.950) # 4.727
-    expect(surfaces["s_N_wall"  ][:heatloss]).to be_within(TOL).of( 1.540) # 6.583
-    expect(surfaces["g_E_wall"  ][:heatloss]).to be_within(TOL).of( 4.300) #18.195
-    expect(surfaces["e_S_wall"  ][:heatloss]).to be_within(TOL).of( 0.850) # 7.703
-    expect(surfaces["e_top"     ][:heatloss]).to be_within(TOL).of( 1.430) # 4.400
-    expect(surfaces["s_W_wall"  ][:heatloss]).to be_within(TOL).of( 1.170) # 5.670
-    expect(surfaces["e_E_wall"  ][:heatloss]).to be_within(TOL).of( 0.320) # 6.023
-    expect(surfaces["e_floor"   ][:heatloss]).to be_within(TOL).of( 2.460) # 8.007
-    expect(surfaces["g_W_wall"  ][:heatloss]).to be_within(TOL).of( 4.300) #18.195
-    expect(surfaces["g_N_wall"  ][:heatloss]).to be_within(TOL).of(15.950) #54.255
-    expect(surfaces["p_W2_floor"][:heatloss]).to be_within(TOL).of( 4.220) #13.729
+    #      roof PSI :  0.02 W/K•m
+    # - parapet PSI :  0.26 W/K•m
+    # ---------------------------
+    # =   delta PSI : -0.24 W/K•m
+    #
+    # e.g. East & West   : reduction of 10.4m x -0.24 W/K•m = -2.496 W/K
+    # e.g. North         : reduction of 36.6m x -0.24 W/K•m = -8.784 W/K
+    #
+    # Total length of roof/parapets : 11m + 2x 36.6m + 2x 10.4m = 105m
+    # ... 105m x -0.24 W/K•m = -25.2 W/K
+    expect(surfaces["g_E_wall"  ][:heatloss]).to be_within(TOL).of( 1.80) #   4.3 = -2.5
+    expect(surfaces["g_W_wall"  ][:heatloss]).to be_within(TOL).of( 1.80) #   4.3 = -2.5
+    expect(surfaces["g_N_wall"  ][:heatloss]).to be_within(TOL).of( 7.17) # 15.95 = -8.8
+    expect(surfaces["g_S1_wall" ][:heatloss]).to be_within(TOL).of( 1.08) #  1.87 = -0.8
+    expect(surfaces["g_S2_wall" ][:heatloss]).to be_within(TOL).of( 0.08) #  1.04 = -1.0
+    expect(surfaces["g_S3_wall" ][:heatloss]).to be_within(TOL).of( 5.07) #  8.19 = -3.1
+
+    expect(surfaces["e_top"     ][:heatloss]).to be_within(TOL).of( 0.11) #  1.32 = -1.2
+    expect(surfaces["e_E_wall"  ][:heatloss]).to be_within(TOL).of( 0.14) #  0.32 = -0.2
+    expect(surfaces["e_W_wall"  ][:heatloss]).to be_within(TOL).of( 0.14) #  0.32 = -0.2
+    expect(surfaces["e_N_wall"  ][:heatloss]).to be_within(TOL).of( 0.95)
+    expect(surfaces["e_S_wall"  ][:heatloss]).to be_within(TOL).of( 0.37) #  0.85 = -0.5
+    expect(surfaces["e_floor"   ][:heatloss]).to be_within(TOL).of( 2.46)
+
+    expect(surfaces["s_E_wall"  ][:heatloss]).to be_within(TOL).of( 1.17)
+    expect(surfaces["s_W_wall"  ][:heatloss]).to be_within(TOL).of( 1.17)
+    expect(surfaces["s_N_wall"  ][:heatloss]).to be_within(TOL).of( 1.54)
+    expect(surfaces["s_S_wall"  ][:heatloss]).to be_within(TOL).of( 1.54)
+    expect(surfaces["s_floor"   ][:heatloss]).to be_within(TOL).of( 2.70)
+
+    expect(surfaces["p_W1_floor"][:heatloss]).to be_within(TOL).of( 4.23)
+    expect(surfaces["p_W2_floor"][:heatloss]).to be_within(TOL).of( 1.82)
+    expect(surfaces["p_W3_floor"][:heatloss]).to be_within(TOL).of( 1.82)
+    expect(surfaces["p_W4_floor"][:heatloss]).to be_within(TOL).of( 0.58)
+    expect(surfaces["p_E_floor" ][:heatloss]).to be_within(TOL).of( 5.73)
+    expect(surfaces["p_N_wall"  ][:heatloss]).to be_within(TOL).of(11.44)
+    expect(surfaces["p_S2_wall" ][:heatloss]).to be_within(TOL).of( 8.16)
+    expect(surfaces["p_S1_wall" ][:heatloss]).to be_within(TOL).of( 2.04)
+    expect(surfaces["p_floor"   ][:heatloss]).to be_within(TOL).of( 3.07)
 
     expect(argh).to have_key(:io)
     out  = JSON.pretty_generate(argh[:io])
@@ -2216,7 +2832,7 @@ RSpec.describe TBD_Tests do
     # "edges": [
     #  {
     #    "psi": "bad",
-    #    "type": "fen",
+    #    "type": "fenestration",
     #    "surfaces": [
     #      "Office Left Wall Window1",
     #      "Office Left Wall"
@@ -3675,7 +4291,7 @@ RSpec.describe TBD_Tests do
     end
   end
 
-  it "can process testing JSON surface KHI entries" do
+  it "can process JSON surface KHI entries" do
     translator = OpenStudio::OSVersion::VersionTranslator.new
     TBD.clean!
 
@@ -5214,12 +5830,15 @@ RSpec.describe TBD_Tests do
     expect(io).to have_key(:edges)
     expect(io[:edges].size).to eq(300)
 
-    n_transitions = 0
-    n_parapets    = 0
-    n_fen_edges   = 0
-    n_heads       = 0
-    n_sills       = 0
-    n_jambs       = 0
+    n_transitions   = 0
+    n_parapets      = 0
+    n_fen_edges     = 0
+    n_heads         = 0
+    n_sills         = 0
+    n_jambs         = 0
+    n_skylightheads = 0
+    n_skylightsills = 0
+    n_skylightjambs = 0
 
     types = {
       t1: :transition,
@@ -5227,7 +5846,10 @@ RSpec.describe TBD_Tests do
       t3: :fenestration,
       t4: :head,
       t5: :sill,
-      t6: :jamb
+      t6: :jamb,
+      t7: :skylighthead,
+      t8: :skylightsill,
+      t9: :skylightjamb
     }.freeze
 
     surfaces.each do |id, surface|
@@ -5246,21 +5868,27 @@ RSpec.describe TBD_Tests do
         t = edge[:type]
         expect(types.values).to include(t)
 
-        n_transitions += 1 if edge[:type] == types[:t1]
-        n_parapets    += 1 if edge[:type] == types[:t2]
-        n_fen_edges   += 1 if edge[:type] == types[:t3]
-        n_heads       += 1 if edge[:type] == types[:t4]
-        n_sills       += 1 if edge[:type] == types[:t5]
-        n_jambs       += 1 if edge[:type] == types[:t6]
+        n_transitions   += 1 if edge[:type] == types[:t1]
+        n_parapets      += 1 if edge[:type] == types[:t2]
+        n_fen_edges     += 1 if edge[:type] == types[:t3]
+        n_heads         += 1 if edge[:type] == types[:t4]
+        n_sills         += 1 if edge[:type] == types[:t5]
+        n_jambs         += 1 if edge[:type] == types[:t6]
+        n_skylightheads += 1 if edge[:type] == types[:t7]
+        n_skylightsills += 1 if edge[:type] == types[:t8]
+        n_skylightjambs += 1 if edge[:type] == types[:t9]
       end
     end
 
-    expect(n_transitions).to eq(  1)
-    expect(n_parapets   ).to eq(  3)
-    expect(n_fen_edges  ).to eq(  0)
-    expect(n_heads      ).to eq(  0)
-    expect(n_sills      ).to eq(  0)
-    expect(n_jambs      ).to eq(128)
+    expect(n_transitions  ).to eq(  1)
+    expect(n_parapets     ).to eq(  3)
+    expect(n_fen_edges    ).to eq(  0)
+    expect(n_heads        ).to eq(  0)
+    expect(n_sills        ).to eq(  0)
+    expect(n_jambs        ).to eq(  0)
+    expect(n_skylightheads).to eq(  0)
+    expect(n_skylightsills).to eq(  0)
+    expect(n_skylightjambs).to eq(128)
   end
 
   it "has a PSI class" do
@@ -5538,24 +6166,30 @@ RSpec.describe TBD_Tests do
     expect(io).to have_key(:edges)
     expect(io[:edges].size).to eq(300)
 
-    n_transitions  = 0
-    n_fen_edges    = 0
-    n_heads        = 0
-    n_sills        = 0
-    n_jambs        = 0
-    n_grades       = 0
-    n_corners      = 0
-    n_rimjoists    = 0
-    fen_length     = 0
+    n_transitions = 0
+    n_fen_edges   = 0
+    n_heads       = 0
+    n_sills       = 0
+    n_jambs       = 0
+    n_doorheads   = 0
+    n_doorsills   = 0
+    n_doorjambs   = 0
+    n_grades      = 0
+    n_corners     = 0
+    n_rimjoists   = 0
+    fen_length    = 0
 
-    t1 = :transition
-    t2 = :fenestration
-    t3 = :head
-    t4 = :sill
-    t5 = :jamb
-    t6 = :gradeconvex
-    t7 = :cornerconvex
-    t8 = :rimjoist
+    t1  = :transition
+    t2  = :fenestration
+    t3  = :head
+    t4  = :sill
+    t5  = :jamb
+    t6  = :doorhead
+    t7  = :doorsill
+    t8  = :doorjamb
+    t9  = :gradeconvex
+    t10 = :cornerconvex
+    t11 = :rimjoist
 
     surfaces.each do |id, surface|
       next unless surface[:boundary].downcase == "outdoors"
@@ -5577,9 +6211,12 @@ RSpec.describe TBD_Tests do
         n_heads       += 1 if edge[:type] == t3
         n_sills       += 1 if edge[:type] == t4
         n_jambs       += 1 if edge[:type] == t5
-        n_grades      += 1 if edge[:type] == t6
-        n_corners     += 1 if edge[:type] == t7
-        n_rimjoists   += 1 if edge[:type] == t8
+        n_doorheads   += 1 if edge[:type] == t6
+        n_doorsills   += 1 if edge[:type] == t7
+        n_doorjambs   += 1 if edge[:type] == t8
+        n_grades      += 1 if edge[:type] == t9
+        n_corners     += 1 if edge[:type] == t10
+        n_rimjoists   += 1 if edge[:type] == t11
 
         fen_length    += edge[:length] if edge[:type] == t2
       end
@@ -5587,9 +6224,12 @@ RSpec.describe TBD_Tests do
 
     expect(n_transitions).to eq(1)
     expect(n_fen_edges  ).to eq(4) # Office Front Wall Window 1
-    expect(n_heads      ).to eq(2) # Window 2 & door
+    expect(n_heads      ).to eq(1) # Window 2
     expect(n_sills      ).to eq(1) # Window 2
-    expect(n_jambs      ).to eq(4) # Window 2 & door
+    expect(n_jambs      ).to eq(2) # Window 2
+    expect(n_doorheads  ).to eq(1) # door
+    expect(n_doorsills  ).to eq(0) # grade PSI > fenestration PSI
+    expect(n_doorjambs  ).to eq(2) # door
     expect(n_grades     ).to eq(3) # including door sill
     expect(n_corners    ).to eq(1)
     expect(n_rimjoists  ).to eq(1)
@@ -9632,13 +10272,13 @@ RSpec.describe TBD_Tests do
       bloc = bloc1
       bloc = bloc2 if surface[:heating] < 18
 
-      if    surface[:type ] == :wall
+      if surface[:type ] == :wall
         bloc[:pro][:walls ] += surface[:net] * surface[:u  ]
         bloc[:ref][:walls ] += surface[:net] * surface[:ref]
       elsif surface[:type ] == :ceiling
         bloc[:pro][:roofs ] += surface[:net] * surface[:u  ]
         bloc[:ref][:roofs ] += surface[:net] * surface[:ref]
-      else                   # :floors
+      else
         bloc[:pro][:floors] += surface[:net] * surface[:u  ]
         bloc[:ref][:floors] += surface[:net] * surface[:ref]
       end
@@ -9723,6 +10363,14 @@ RSpec.describe TBD_Tests do
             bloc[:pro][:parapets ] += edge[:length] * edge[:psi  ]
             bloc[:ref][:parapets ] += edge[:length] * edge[:ratio] * val[tt]
           when :fenestration
+            expect(rate).to be_within(0.1).of(40.0)
+            bloc[:pro][:trim     ] += edge[:length] * edge[:psi  ]
+            bloc[:ref][:trim     ] += edge[:length] * edge[:ratio] * val[tt]
+          when :door
+            expect(rate).to be_within(0.1).of(40.0)
+            bloc[:pro][:trim     ] += edge[:length] * edge[:psi  ]
+            bloc[:ref][:trim     ] += edge[:length] * edge[:ratio] * val[tt]
+          when :skylight
             expect(rate).to be_within(0.1).of(40.0)
             bloc[:pro][:trim     ] += edge[:length] * edge[:psi  ]
             bloc[:ref][:trim     ] += edge[:length] * edge[:ratio] * val[tt]
@@ -12391,7 +13039,6 @@ RSpec.describe TBD_Tests do
     surfaces = argh[:surfaces]
     expect(surfaces.size).to eq(23)
 
-    # argh[:io][:description] = "test UA vs multipliers"
     io[:description] = "test UA vs multipliers"
 
     ua = TBD.ua_summary(Time.now, argh)
@@ -12402,7 +13049,6 @@ RSpec.describe TBD_Tests do
 
     mult_ud_md = TBD.ua_md(ua, :en)
     pth        = File.join(__dir__, "files/ua/ua_mult.md")
-
     File.open(pth, "w") { |file| file.puts mult_ud_md }
 
     [front, left].each do |side|
@@ -12437,12 +13083,15 @@ RSpec.describe TBD_Tests do
       # Per office ouside-facing wall:
       #   - nb: number of distinct edges, per MAJOR thermal bridge type
       #   - lm: total edge lengths (m), per MAJOR thermal bridge type
-      jambs   = { nb: 0, lm: 0 }
-      sills   = { nb: 0, lm: 0 }
-      heads   = { nb: 0, lm: 0 }
-      grades  = { nb: 0, lm: 0 }
-      rims    = { nb: 0, lm: 0 }
-      corners = { nb: 0, lm: 0 }
+      jambs     = { nb: 0, lm: 0 }
+      sills     = { nb: 0, lm: 0 }
+      heads     = { nb: 0, lm: 0 }
+      doorjambs = { nb: 0, lm: 0 }
+      doorsills = { nb: 0, lm: 0 }
+      doorheads = { nb: 0, lm: 0 }
+      grades    = { nb: 0, lm: 0 }
+      rims      = { nb: 0, lm: 0 }
+      corners   = { nb: 0, lm: 0 }
 
       io[:edges].each do |edge|
         expect(edge).to have_key(:surfaces)
@@ -12456,54 +13105,73 @@ RSpec.describe TBD_Tests do
 
         case edge[:type]
         when :jamb
-          jambs[  :nb] += 1
-          jambs[  :lm] += edge[:length]
+          jambs[    :nb] += 1
+          jambs[    :lm] += edge[:length]
         when :sill
-          sills[  :nb] += 1
-          sills[  :lm] += edge[:length]
+          sills[    :nb] += 1
+          sills[    :lm] += edge[:length]
         when :head
-          heads[  :nb] += 1
-          heads[  :lm] += edge[:length]
+          heads[    :nb] += 1
+          heads[    :lm] += edge[:length]
+        when :doorjamb
+          doorjambs[:nb] += 1
+          doorjambs[:lm] += edge[:length]
+        when :doorsill
+          doorsills[:nb] += 1
+          doorsills[:lm] += edge[:length]
+        when :doorhead
+          doorheads[:nb] += 1
+          doorheads[:lm] += edge[:length]
         when :gradeconvex
-          grades[ :nb] += 1
-          grades[ :lm] += edge[:length]
+          grades[   :nb] += 1
+          grades[   :lm] += edge[:length]
         when :rimjoist
-          rims[   :nb] += 1
-          rims[   :lm] += edge[:length]
+          rims[     :nb] += 1
+          rims[     :lm] += edge[:length]
         else
-          corners[:nb] += 1
-          corners[:lm] += edge[:length]
+          corners[  :nb] += 1
+          corners[  :lm] += edge[:length]
         end
       end
 
-      expect(  jambs[:nb]).to eq(6) # 2x windows + 1x door ... 2x
-      expect(  sills[:nb]).to eq(2) # 2x windows
-      expect(  heads[:nb]).to eq(3) # 2x windows + 1x door
-      expect( grades[:nb]).to eq(3) # split by door sill
-      expect(   rims[:nb]).to eq(1)
-      expect(corners[:nb]).to eq(1)
+      expect(    jambs[:nb]).to eq(4) # 2x windows ... 2x
+      expect(    sills[:nb]).to eq(2) # 2x windows
+      expect(    heads[:nb]).to eq(2) # 2x windows
+      expect(doorjambs[:nb]).to eq(2) # 1x door ... 2x
+      expect(doorsills[:nb]).to eq(0) # 1x door
+      expect(doorheads[:nb]).to eq(1) # 1x door
+      expect(   grades[:nb]).to eq(3) # split by door sill
+      expect(     rims[:nb]).to eq(1)
+      expect(  corners[:nb]).to eq(1)
 
       if side == front
-        expect(  jambs[:lm]).to be_within(TOL).of(10.37)
-        expect(  sills[:lm]).to be_within(TOL).of( 7.31)
-        expect(  heads[:lm]).to be_within(TOL).of( 9.14)
-        expect( grades[:lm]).to be_within(TOL).of(25.91)
-        expect(   rims[:lm]).to be_within(TOL).of(25.91) # same as grade
-        expect(corners[:lm]).to be_within(TOL).of( 4.27)
+        expect(    jambs[:lm]).to be_within(TOL).of( 6.10)
+        expect(    sills[:lm]).to be_within(TOL).of( 7.31)
+        expect(    heads[:lm]).to be_within(TOL).of( 7.31)
+        expect(doorjambs[:lm]).to be_within(TOL).of( 4.27)
+        expect(doorsills[:lm]).to be_within(TOL).of( 0.00)
+        expect(doorheads[:lm]).to be_within(TOL).of( 1.83)
+        expect(   grades[:lm]).to be_within(TOL).of(25.91)
+        expect(     rims[:lm]).to be_within(TOL).of(25.91) # same as grade
+        expect(  corners[:lm]).to be_within(TOL).of( 4.27)
 
         loss  = 0.200 * (jambs[:lm] + sills[:lm] + heads[:lm])
+        loss += 0.200 * (doorjambs[:lm] + doorsills[:lm] + doorheads[:lm])
         loss += 0.450 * grades[:lm]
         loss += 0.300 * (rims[:lm] + corners[:lm]) / 2
         expect(loss ).to be_within(TOL).of(21.55)
         expect(hloss).to be_within(TOL).of(loss)
       else # left
-        expect(  jambs[:lm]).to be_within(TOL).of(10.37) # same as front
-        expect(  sills[:lm]).to be_within(TOL).of( 4.27)
-        expect(  heads[:lm]).to be_within(TOL).of( 5.18)
-        expect( grades[:lm]).to be_within(TOL).of( 9.14)
-        expect(   rims[:lm]).to be_within(TOL).of( 9.14) # same as grade
-        expect(corners[:lm]).to be_within(TOL).of( 4.27) # same as front
-        expect(hloss       ).to be_within(TOL).of(10.09)
+        expect(    jambs[:lm]).to be_within(TOL).of( 6.10) # same as front
+        expect(    sills[:lm]).to be_within(TOL).of( 4.27)
+        expect(    heads[:lm]).to be_within(TOL).of( 4.27)
+        expect(doorjambs[:lm]).to be_within(TOL).of( 4.27) # same as front
+        expect(doorsills[:lm]).to be_within(TOL).of( 0.00)
+        expect(doorheads[:lm]).to be_within(TOL).of( 0.91)
+        expect(   grades[:lm]).to be_within(TOL).of( 9.14)
+        expect(     rims[:lm]).to be_within(TOL).of( 9.14) # same as grade
+        expect(  corners[:lm]).to be_within(TOL).of( 4.27) # same as front
+        expect(hloss         ).to be_within(TOL).of(10.09)
       end
     end
 
@@ -12584,12 +13252,15 @@ RSpec.describe TBD_Tests do
       # 2nd tallies, per office ouside-facing wall:
       #   - nb: number of distinct edges, per MAJOR thermal bridge type
       #   - lm: total edge lengths (m), per MAJOR thermal bridge type
-      jambs2   = { nb: 0, lm: 0 }
-      sills2   = { nb: 0, lm: 0 }
-      heads2   = { nb: 0, lm: 0 }
-      grades2  = { nb: 0, lm: 0 }
-      rims2    = { nb: 0, lm: 0 }
-      corners2 = { nb: 0, lm: 0 }
+      jambs2     = { nb: 0, lm: 0 }
+      sills2     = { nb: 0, lm: 0 }
+      heads2     = { nb: 0, lm: 0 }
+      doorjambs2 = { nb: 0, lm: 0 }
+      doorsills2 = { nb: 0, lm: 0 }
+      doorheads2 = { nb: 0, lm: 0 }
+      grades2    = { nb: 0, lm: 0 }
+      rims2      = { nb: 0, lm: 0 }
+      corners2   = { nb: 0, lm: 0 }
 
       io[:edges].each do |edge|
         expect(edge).to have_key(:surfaces)
@@ -12603,42 +13274,58 @@ RSpec.describe TBD_Tests do
 
         case edge[:type]
         when :jamb
-          jambs2[  :nb] += 1
-          jambs2[  :lm] += edge[:length]
+          jambs2[    :nb] += 1
+          jambs2[    :lm] += edge[:length]
         when :sill
-          sills2[  :nb] += 1
-          sills2[  :lm] += edge[:length]
+          sills2[    :nb] += 1
+          sills2[    :lm] += edge[:length]
         when :head
-          heads2[  :nb] += 1
-          heads2[  :lm] += edge[:length]
+          heads2[    :nb] += 1
+          heads2[    :lm] += edge[:length]
+        when :doorjamb
+          doorjambs2[:nb] += 1
+          doorjambs2[:lm] += edge[:length]
+        when :doorsill
+          doorsills2[:nb] += 1
+          doorsills2[:lm] += edge[:length]
+        when :doorhead
+          doorheads2[:nb] += 1
+          doorheads2[:lm] += edge[:length]
         when :gradeconvex
-          grades2[ :nb] += 1
-          grades2[ :lm] += edge[:length]
+          grades2[   :nb] += 1
+          grades2[   :lm] += edge[:length]
         when :rimjoist
-          rims2[   :nb] += 1
-          rims2[   :lm] += edge[:length]
+          rims2[     :nb] += 1
+          rims2[     :lm] += edge[:length]
         else
-          corners2[:nb] += 1
-          corners2[:lm] += edge[:length]
+          corners2[  :nb] += 1
+          corners2[  :lm] += edge[:length]
         end
       end
 
       expect(surfaces[side]).to have_key(:heatloss)
       hloss = surfaces[side][:heatloss]
 
-      expect(  jambs2[:nb]).to eq(6) # no change vs initial, unaltered model
-      expect(  sills2[:nb]).to eq(2)
-      expect(  heads2[:nb]).to eq(3)
-      expect( grades2[:nb]).to eq(3)
-      expect(   rims2[:nb]).to eq(1)
-      expect(corners2[:nb]).to eq(1)
+      # No change vs initial, unaltered model.
+      expect(    jambs2[:nb]).to eq(4)
+      expect(    sills2[:nb]).to eq(2)
+      expect(    heads2[:nb]).to eq(2)
+      expect(doorjambs2[:nb]).to eq(2)
+      expect(doorsills2[:nb]).to eq(0)
+      expect(doorheads2[:nb]).to eq(1)
+      expect(   grades2[:nb]).to eq(3)
+      expect(     rims2[:nb]).to eq(1)
+      expect(  corners2[:nb]).to eq(1)
 
       if side == front
-        expect(  jambs2[:lm]).to be_within(TOL).of(10.37 * mult)
-        expect(  sills2[:lm]).to be_within(TOL).of( 7.31 * mult)
-        expect(  heads2[:lm]).to be_within(TOL).of( 9.14 * mult)
-        expect(   rims2[:lm]).to be_within(TOL).of(25.91) # unchanged
-        expect(corners2[:lm]).to be_within(TOL).of( 4.27) # unchanged
+        expect(    jambs2[:lm]).to be_within(TOL).of( 6.10 * mult)
+        expect(    sills2[:lm]).to be_within(TOL).of( 7.31 * mult)
+        expect(    heads2[:lm]).to be_within(TOL).of( 7.31 * mult)
+        expect(doorjambs2[:lm]).to be_within(TOL).of( 4.27 * mult)
+        expect(doorsills2[:lm]).to be_within(TOL).of( 0.00 * mult)
+        expect(doorheads2[:lm]).to be_within(TOL).of( 1.83 * mult)
+        expect(     rims2[:lm]).to be_within(TOL).of(25.91) # unchanged
+        expect(  corners2[:lm]).to be_within(TOL).of( 4.27) # unchanged
 
         # In the OpenStudio warehouse model, the front door (2x 915mm) "sill" is
         # aligned along the slab-on-"grade" edge. It is the only such "shared"
@@ -12657,32 +13344,41 @@ RSpec.describe TBD_Tests do
         # unintended conflicts with parent and siblings (i.e. other subsurfaces
         # sharing the same parent). As such, TBD would overestimate the total
         # "grade" length by the added "sill" length.
-        expect( grades2[:lm]).to be_within(TOL).of(25.91 + 2 * 0.915)
+        expect(grades2[:lm]).to be_within(TOL).of(25.91 + 2 * 0.915)
 
         # This (user-selected) discrepancy can easily be countered (by the very
         # same user), by proportionally adjusting the selected "grade" PSI
         # factor (using TBD JSON customization). For this reason, TBD will not
         # raise this as an error. Nonetheless, the use of subsurface multipliers
         # will require a clear set of recommendations in TBD's online Guide.
-        extra  = 0.200 * jambs2[:lm] / 2
-        extra += 0.200 * sills2[:lm] / 2
-        extra += 0.200 * heads2[:lm] / 2
+        extra  = 0.200 *     jambs2[:lm] / 2
+        extra += 0.200 *     sills2[:lm] / 2
+        extra += 0.200 *     heads2[:lm] / 2
+        extra += 0.200 * doorjambs2[:lm] / 2
+        extra += 0.200 * doorheads2[:lm] / 2
+        extra += 0.200 * doorsills2[:lm] / 2
         extra += 0.450 * 2 * 0.915
         expect(extra).to be_within(TOL).of(6.19)
         expect(hloss).to be_within(TOL).of(21.55 + extra)
       else # left
-        expect(  jambs2[:lm]).to be_within(TOL).of(10.37 * mult)
-        expect(  sills2[:lm]).to be_within(TOL).of( 4.27 * mult)
-        expect(  heads2[:lm]).to be_within(TOL).of( 5.18 * mult)
-        expect(   rims2[:lm]).to be_within(TOL).of( 9.14) # unchanged
-        expect(corners2[:lm]).to be_within(TOL).of( 4.27) # unchanged
+        expect(    jambs2[:lm]).to be_within(TOL).of( 6.10 * mult)
+        expect(    sills2[:lm]).to be_within(TOL).of( 4.27 * mult)
+        expect(    heads2[:lm]).to be_within(TOL).of( 4.27 * mult)
+        expect(doorjambs2[:lm]).to be_within(TOL).of( 4.27 * mult)
+        expect(doorsills2[:lm]).to be_within(TOL).of( 0.00 * mult)
+        expect(doorheads2[:lm]).to be_within(TOL).of( 0.91 * mult)
+        expect(     rims2[:lm]).to be_within(TOL).of( 9.14) # unchanged
+        expect(  corners2[:lm]).to be_within(TOL).of( 4.27) # unchanged
 
         # See above comments for grade vs sill discrepancy.
-        expect( grades2[:lm]).to be_within(TOL).of( 9.14 + 0.915)
+        expect(grades2[:lm]).to be_within(TOL).of(9.14 + 0.915)
 
         extra  = 0.200 * jambs2[:lm] / 2
         extra += 0.200 * sills2[:lm] / 2
         extra += 0.200 * heads2[:lm] / 2
+        extra += 0.200 * doorjambs2[:lm] / 2
+        extra += 0.200 * doorheads2[:lm] / 2
+        extra += 0.200 * doorsills2[:lm] / 2
         extra += 0.450 * 0.915
         expect(extra).to be_within(TOL).of(4.37)
         expect(hloss).to be_within(TOL).of(10.09 + extra)
@@ -13074,7 +13770,7 @@ RSpec.describe TBD_Tests do
       expect(argh[:wall_uo]).to be_within(TOL).of(0.00236) # RSi 423 (R2K)
     end
   end
-
+  
   it "can process floorszone multipliers" do
     translator = OpenStudio::OSVersion::VersionTranslator.new
     TBD.clean!
