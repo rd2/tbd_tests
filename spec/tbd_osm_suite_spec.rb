@@ -65,7 +65,15 @@ RSpec.describe TBD_Tests do
     # opts << "spandrel (BETBG)"
     # opts << "spandrel HP (BETBG)"
     # opts << "code (Quebec)"
-    opts << "uncompliant (Quebec)"
+    # opts << "uncompliant (Quebec)"
+    # opts << "90.1.22|steel.m|default"
+    opts << "90.1.22|steel.m|unmitigated"
+    # opts << "90.1.22|mass.ex|default"
+    # opts << "90.1.22|mass.ex|unmitigated"
+    # opts << "90.1.22|mass.in|default"
+    # opts << "90.1.22|mass.in|unmitigated"
+    # opts << "90.1.22|wood.fr|default"
+    opts << "90.1.22|wood.fr|unmitigated"
     opts << "(non thermal bridging)"
 
     osms.each do |osm|

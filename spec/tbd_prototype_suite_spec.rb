@@ -51,7 +51,7 @@ RSpec.describe TBD_Tests do
 
     # types << "SecondarySchool"
     # types << "PrimarySchool"
-    # types << "SmallOffice"
+    types << "SmallOffice"
     # types << "MediumOffice"
     # types << "LargeOffice"
     # types << "SmallHotel"
@@ -60,8 +60,8 @@ RSpec.describe TBD_Tests do
     # types << "RetailStandalone"
     # types << "RetailStripmall"
     # types << "QuickServiceRestaurant"
-    types << "FullServiceRestaurant"
-    types << "MidriseApartment"
+    # types << "FullServiceRestaurant"
+    # types << "MidriseApartment"
     # types << "HighriseApartment"
     # types << "Hospital"
     # types << "Outpatient"
@@ -72,8 +72,16 @@ RSpec.describe TBD_Tests do
     # opts << "efficient (BETBG)"
     # opts << "spandrel (BETBG)"
     # opts << "spandrel HP (BETBG)"
-    opts << "code (Quebec)"
-    opts << "uncompliant (Quebec)"
+    # opts << "code (Quebec)"
+    # opts << "uncompliant (Quebec)"
+    # opts << "90.1.22|steel.m|default"
+    opts << "90.1.22|steel.m|unmitigated"
+    # opts << "90.1.22|mass.ex|default"
+    # opts << "90.1.22|mass.ex|unmitigated"
+    # opts << "90.1.22|mass.in|default"
+    # opts << "90.1.22|mass.in|unmitigated"
+    # opts << "90.1.22|wood.fr|default"
+    opts << "90.1.22|wood.fr|unmitigated"
     opts << "(non thermal bridging)"
 
     types.each do |type|
@@ -109,7 +117,7 @@ RSpec.describe TBD_Tests do
       opts.each do |opt|
         id   = "#{type}_#{opt}"
         file = File.join(runs, id, "out.osw")
-        
+
         results[opt] = {}
 
         File.open(file, "r") do |f|
