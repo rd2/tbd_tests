@@ -29,21 +29,21 @@ RSpec.describe TBD_Tests do
     osw_ = File.join(__dir__, "files/osws/prototype_suite.osw"              )
     runs = File.join(__dir__, "prototype_suite_runs"                        )
 
-    expect( Dir.exist?(tbd_)).to be(true)
-    expect( Dir.exist?(res_)).to be(true)
-    expect( Dir.exist?(pro_)).to be(true)
-    expect(File.exist?(osw_)).to be(true)
+    expect( Dir.exist?(tbd_)).to be true
+    expect( Dir.exist?(res_)).to be true
+    expect( Dir.exist?(pro_)).to be true
+    expect(File.exist?(osw_)).to be true
 
     FileUtils.mkdir_p(runs)
-    nproc    = [1, Parallel.processor_count - 2].max      # nb processors to use
+    nproc    = [1, Parallel.processor_count - 2].max # nb processors to use
     template = nil
 
     File.open(osw_, "r") do |f|
       template = JSON.parse(f.read, { symbolize_names: true })
     end
 
-    expect(template.nil?  ).to be(false)
-    expect(template.empty?).to be(false)
+    expect(template).to_not be_nil
+    expect(template).to_not be_empty
 
     types  = []
     opts   = []
@@ -51,20 +51,20 @@ RSpec.describe TBD_Tests do
 
     # types << "SecondarySchool"
     # types << "PrimarySchool"
-    # types << "SmallOffice"
+    types << "SmallOffice"
     # types << "MediumOffice"
     # types << "LargeOffice"
     # types << "SmallHotel"
     # types << "LargeHotel"
-    # types << "Warehouse"
+    types << "Warehouse"
     # types << "RetailStandalone"
     # types << "RetailStripmall"
     # types << "QuickServiceRestaurant"
-    types << "FullServiceRestaurant"
-    types << "MidriseApartment"
-    types << "HighriseApartment"
-    types << "Hospital"
-    types << "Outpatient"
+    # types << "FullServiceRestaurant"
+    # types << "MidriseApartment"
+    # types << "HighriseApartment"
+    # types << "Hospital"
+    # types << "Outpatient"
 
     opts << "skip"
     # opts << "poor (BETBG)"
@@ -72,15 +72,23 @@ RSpec.describe TBD_Tests do
     # opts << "efficient (BETBG)"
     # opts << "spandrel (BETBG)"
     # opts << "spandrel HP (BETBG)"
-    opts << "code (Quebec)"
-    opts << "uncompliant (Quebec)"
+    # opts << "code (Quebec)"
+    # opts << "uncompliant (Quebec)"
+    # opts << "90.1.22|steel.m|default"
+    opts << "90.1.22|steel.m|unmitigated"
+    # opts << "90.1.22|mass.ex|default"
+    # opts << "90.1.22|mass.ex|unmitigated"
+    # opts << "90.1.22|mass.in|default"
+    # opts << "90.1.22|mass.in|unmitigated"
+    # opts << "90.1.22|wood.fr|default"
+    opts << "90.1.22|wood.fr|unmitigated"
     opts << "(non thermal bridging)"
 
     types.each do |type|
       opts.each { |opt| combos << [type, opt] }
     end
 
-    Parallel.each(combos, in_threads: nproc) do |combo|     # run E+ simulations
+    Parallel.each(combos, in_threads: nproc) do |combo| # run E+ simulations
       type  = combo[0]
       opt   = combo[1]
       id    = "#{type}_#{opt}"
@@ -88,11 +96,11 @@ RSpec.describe TBD_Tests do
       next if File.exist?(dir) && File.exist?(File.join(dir, "out.osw"))
 
       FileUtils.mkdir_p(dir)
-      osw   = Marshal.load( Marshal.dump(template) )
+      osw = Marshal.load( Marshal.dump(template) )
 
       osw[:steps][0][:arguments][:building_type] = type
-      osw[:steps][1][:arguments][:__SKIP__     ] = true         if opt == "skip"
-      osw[:steps][1][:arguments][:option       ] = opt      unless opt == "skip"
+      osw[:steps][1][:arguments][:__SKIP__     ] = true    if opt == "skip"
+      osw[:steps][1][:arguments][:option       ] = opt unless opt == "skip"
 
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
@@ -103,12 +111,13 @@ RSpec.describe TBD_Tests do
 
     puts
 
-    types.each do |type|                 # fetch & compare E+ simulation results
+    types.each do |type| # fetch & compare E+ simulation results
       results = {}
 
       opts.each do |opt|
-        id           = "#{type}_#{opt}"
-        file         = File.join(runs, id, "out.osw")
+        id   = "#{type}_#{opt}"
+        file = File.join(runs, id, "out.osw")
+
         results[opt] = {}
 
         File.open(file, "r") do |f|

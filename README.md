@@ -1,6 +1,6 @@
 # Testing TBD  
 
-_Thermal Bridging & Derating_ (or [TBD](https://github.com/rd2/tbd)) is an [OpenStudio Measure](https://nrel.github.io/OpenStudio-user-documentation/reference/measure_writing_guide/) that first autodetects _major_ thermal bridges (like balconies, parapets and corners) in an OpenStudio model (.osm), and then _derates_ outside-facing, opaque surface constructions (walls, roofs and exposed floors). It interacts with the [OpenStudio SDK](https://openstudio-sdk-documentation.s3.amazonaws.com/index.html) and relies on _AutomaticMagic_'s [Topolys](https://github.com/automaticmagic/topolys) gem, as well as _rd2_'s [OSut](https://rubygems.org/gems/osut/versions/0.2.7) gem.
+_Thermal Bridging & Derating_ (or [TBD](https://github.com/rd2/tbd)) is an [OpenStudio Measure](https://nrel.github.io/OpenStudio-user-documentation/reference/measure_writing_guide/) that first autodetects _major_ thermal bridges (like balconies, parapets and corners) in an OpenStudio model (.osm), and then _derates_ outside-facing, opaque surface constructions (walls, roofs and exposed floors). It interacts with the [OpenStudio SDK](https://openstudio-sdk-documentation.s3.amazonaws.com/index.html) and relies on _AutomaticMagic_'s [Topolys](https://github.com/automaticmagic/topolys) gem, as well as _rd2_'s [OSut](https://rubygems.org/gems/osut) gem.
 
 This repository houses the numerous automated TBD tests developed over time, in an effort to _lighten_ TBD as a Ruby gem. TBD and its dependencies are pulled-in automatically, before launching both TBD gem and OpenStudio measure RSpec tests.
 
@@ -41,14 +41,14 @@ bundle exec rake suites_run
 
 Install [Docker](https://docs.docker.com/desktop/#download-and-install).
 
-Pull the OpenStudio v3.4.0 Docker image:
+Pull the OpenStudio v3.6.1 Docker image:
 ```
-docker pull nrel/openstudio:3.4.0
+docker pull nrel/openstudio:3.6.1
 ```
 
 In the root repository:
 ```
-docker run --name test --rm -d -t -v ${PWD}:/work -w /work nrel/openstudio:3.4.0
+docker run --name test --rm -d -t -v ${PWD}:/work -w /work nrel/openstudio:3.6.1
 docker exec -t test bundle update
 docker exec -t test bundle exec rake
 docker kill test
