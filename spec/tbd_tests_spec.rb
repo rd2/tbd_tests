@@ -6629,6 +6629,7 @@ RSpec.describe TBD_Tests do
     expect(front.netArea  ).to be_within(TOL).of( 95.49)
     expect(front.grossArea).to be_within(TOL).of(110.54)
 
+
     # Open another warehouse model and add/assign a Frame & Divider object.
     file     = File.join(__dir__, "files/osms/in/warehouse.osm")
     path     = OpenStudio::Path.new(file)
@@ -6744,6 +6745,13 @@ RSpec.describe TBD_Tests do
 
     # Adding a clerestory window, slightly above "Office Front Wall Window 1",
     # to test/validate overlapping cases. Starting with a safe case.
+    #
+    # FYI, original "Office Front Wall Window 1" (without F&D widths).
+    #   3.66, 0, 2.44
+    #   3.66, 0, 0.91
+    #   7.31, 0, 0.91
+    #   7.31, 0, 2.44
+
     cl_v  = OpenStudio::Point3dVector.new
     cl_v << OpenStudio::Point3d.new( 3.66, 0.00, 4.00)
     cl_v << OpenStudio::Point3d.new( 3.66, 0.00, 2.47)
@@ -6845,7 +6853,7 @@ RSpec.describe TBD_Tests do
 
     # Same exercise, yet provide clerestory with Frame & Divider.
     fd2    = OpenStudio::Model::WindowPropertyFrameAndDivider.new(model_FD)
-    width2 = 0.03
+    width2 = 0.06
     expect(fd2.setFrameWidth(width2)).to be true
     expect(fd2.setFrameConductance(2.500)).to be true
     expect(clerestory.allowWindowPropertyFrameAndDivider).to be true
@@ -6915,8 +6923,8 @@ RSpec.describe TBD_Tests do
 
     # In addition, the top of the "Office Front Wall Window 1" is no longer
     # aligned with the bottom of the clerestory.
-    expect(((p1[0].z - p2[1].z).abs - width2).abs).to be_within(TOL).of(0)
-    expect(((p1[3].z - p2[2].z).abs - width2).abs).to be_within(TOL).of(0)
+    expect(((p1[0].z - p2[1].z).abs - width).abs).to be_within(TOL).of(0)
+    expect(((p1[3].z - p2[2].z).abs - width).abs).to be_within(TOL).of(0)
 
     TBD.clean!
     vec1 = OpenStudio::Point3dVector.new
