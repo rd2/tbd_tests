@@ -13093,11 +13093,11 @@ RSpec.describe TBD_Tests do
     expect(json).to have_key(:surfaces)
     io       = json[:io      ]
     surfaces = json[:surfaces]
-    expect(TBD.fatal?).to be true
+    expect(TBD.error?).to be true
     expect(TBD.logs.size).to eq(2)
     expect(surfaces).to be_a(Hash)
     expect(surfaces.size).to eq(43)
-    expect(io).to be_nil
+    expect(io).to be_a(Hash)
 
     m1 = TBD.logs.first[:message]
     m2 = TBD.logs.last[ :message]
@@ -13162,7 +13162,7 @@ RSpec.describe TBD_Tests do
     expect(TBD.error?).to be true
     expect(TBD.logs.size).to eq(1)
     message = TBD.logs.first[:message]
-    expect(message).to include("Empty 'polygon' (OSut::poly)")
+    expect(message).to include(msg)
   end
 
   it "checks for Frame & Divider reveals" do
