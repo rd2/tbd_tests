@@ -1,5 +1,5 @@
-# source "https://rubygems.org"
+source "https://rubygems.org"
 
-gem "tbd", git: "https://github.com/jmarrec/tbd", branch: "json_schema"
+gem "tbd", git: "https://github.com/rd2/tbd", branch: "json"
 
 gemspec
