@@ -28,7 +28,7 @@ Gem::Specification.new do |s|
   s.metadata                 = {}
 
   s.add_development_dependency "tbd",            "3.4.1"
-  s.add_development_dependency "json-schema", "~> 2.7.0"
+  s.add_development_dependency "json-schema", "~> 4"
   s.add_development_dependency "bundler",     "~> 2.1"
   s.add_development_dependency "rake",        "~> 13.0"
   s.add_development_dependency "rspec",       "~> 3.11"
