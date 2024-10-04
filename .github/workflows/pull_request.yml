@@ -118,7 +118,7 @@ jobs:
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
         docker kill test
-  test_380x:
+test_380x:
     runs-on: ubuntu-22.04
     steps:
     - name: Check out repository
@@ -131,7 +131,6 @@ jobs:
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.8.0
         docker exec -t test pwd
         docker exec -t test ls
-        bundle config set --local without openstudio_prerelease
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
         docker kill test
