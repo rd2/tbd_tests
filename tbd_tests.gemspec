@@ -27,9 +27,8 @@ Gem::Specification.new do |s|
   s.required_ruby_version    = [">= 2.5.0", "< 4"]
   s.metadata                 = {}
 
-  s.add_development_dependency "tbd",            "3.4.1"
+  s.add_development_dependency "tbd",            "3.4.2"
   s.add_development_dependency "json-schema", "~> 4"
-  s.add_development_dependency "bundler",     "~> 2.1"
   s.add_development_dependency "rake",        "~> 13.0"
   s.add_development_dependency "rspec",       "~> 3.11"
   s.add_development_dependency "parallel",    "~> 1.19"
@@ -37,18 +36,24 @@ Gem::Specification.new do |s|
   if /^2.5/.match(RUBY_VERSION)
     s.required_ruby_version = "~> 2.5.0"
 
+    s.add_development_dependency "bundler",     "~> 2.1"
+
     s.add_development_dependency "openstudio-common-measures",    "~> 0.2.1"
     s.add_development_dependency "openstudio-model-articulation", "~> 0.2.1"
   elsif /^2.7/.match(RUBY_VERSION)
     s.required_ruby_version = "~> 2.7.0"
 
+    s.add_development_dependency "bundler",     "~> 2.1"
+
     s.add_development_dependency "openstudio-common-measures",    "~> 0.5.0"
     s.add_development_dependency "openstudio-model-articulation", "~> 0.5.0"
   else
-    s.required_ruby_version = "~> 3.2.0"
+    s.required_ruby_version = "~> 3.2.2"
 
-    #s.add_development_dependency "openstudio-common-measures",    "~> 0.10.0"
-    #s.add_development_dependency "openstudio-model-articulation", "~> 0.10.0"
+    s.add_development_dependency "bundler",     "~> 2.4.10"
+
+    s.add_development_dependency "openstudio-common-measures",    "~> 0.10.0"
+    s.add_development_dependency "openstudio-model-articulation", "~> 0.10.0"
   end
 
   s.metadata["homepage_uri"   ] = s.homepage
