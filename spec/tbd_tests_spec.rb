@@ -14260,8 +14260,8 @@ RSpec.describe TBD_Tests do
     # 5x edges (instead of original 4x).
     expect(trsm_heads).to eq(1)
     expect(trsm_sills).to be_zero # instead shared with door and sidelight
-    expect(trsm_jambs).to eq(2) # 1x full height + 1x partial height
-    expect(trsm_trns ).to eq(2) # shared with sidelight + door
+    expect(trsm_jambs).to eq(2)   # 1x full height + 1x partial height
+    expect(trsm_trns ).to eq(2)   # shared with sidelight + door
 
     expect(trsm_jamb_m).to be_within(TOL).of(2 * 0.4          )
     expect(trsm_trns_m).to be_within(TOL).of(maxY - minY + 0.5)
