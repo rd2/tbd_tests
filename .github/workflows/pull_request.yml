@@ -118,7 +118,7 @@ jobs:
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
         docker kill test
-test_380x:
+  test_380x:
     runs-on: ubuntu-22.04
     steps:
     - name: Check out repository
