@@ -1,13 +1,13 @@
 require "tbd"
 
 RSpec.describe TBD_Tests do
-  TOL  = TBD::TOL
-  TOL2 = TBD::TOL2
-  DBG  = TBD::DBG
-  INF  = TBD::INF
-  WRN  = TBD::WRN
-  ERR  = TBD::ERR
-  FTL  = TBD::FTL
+  TOL  = TBD::TOL.dup
+  TOL2 = TBD::TOL2.dup
+  DBG  = TBD::DBG.dup
+  INF  = TBD::INF.dup
+  WRN  = TBD::WRN.dup
+  ERR  = TBD::ERR.dup
+  FTL  = TBD::FTL.dup
 
   it "can process thermal bridging and derating: LoScrigno" do
     expect(TBD.level     ).to eq(INF)
