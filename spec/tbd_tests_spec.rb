@@ -3867,6 +3867,12 @@ RSpec.describe TBD_Tests do
         expect(model).to_not be_empty
         model = model.get
 
+        # "Shading Surface 4" is overlapping with a plenum exterior wall.
+        sh4 = model.getShadingSurfaceByName("Shading Surface 4")
+        expect(sh4).to_not be_empty
+        sh4 = sh4.get
+        sh4.remove
+
         plnum = model.getSpaceByName("Level 0 Ceiling Plenum")
         expect(plnum).to_not be_empty
         plnum = plnum.get
@@ -3918,12 +3924,6 @@ RSpec.describe TBD_Tests do
             expect(TBD.same?(vertex, s.vertices.at(i))).to be true
           end
         end
-
-        # "Shading Surface 4" is also overlapping with a plenum exterior wall.
-        sh4 = model.getShadingSurfaceByName("Shading Surface 4")
-        expect(sh4).to_not be_empty
-        sh4 = sh4.get
-        sh4.remove
 
         # Save for future testing.
         file = File.join(__dir__, "files/osms/out/unconditioned2.osm")
@@ -4202,6 +4202,12 @@ RSpec.describe TBD_Tests do
         expect(model).to_not be_empty
         model = model.get
 
+        # "Shading Surface 4" is overlapping with a plenum exterior wall.
+        sh4 = model.getShadingSurfaceByName("Shading Surface 4")
+        expect(sh4).to_not be_empty
+        sh4 = sh4.get
+        sh4.remove
+
         plnum = model.getSpaceByName("Level 0 Ceiling Plenum")
         expect(plnum).to_not be_empty
         plnum = plnum.get
@@ -4253,12 +4259,6 @@ RSpec.describe TBD_Tests do
           end
         end
 
-        # "Shading Surface 4" is also overlapping with a plenum exterior wall.
-        sh4 = model.getShadingSurfaceByName("Shading Surface 4")
-        expect(sh4).to_not be_empty
-        sh4 = sh4.get
-        sh4.remove
-
         # Save for future testing.
         file = File.join(__dir__, "files/osms/out/seb2.osm")
         model.save(file, true)
@@ -4270,7 +4270,7 @@ RSpec.describe TBD_Tests do
           expect(plnum.isVolumeAutocalculated).to be true
         end
 
-        expect(plnum.volume.round(0)).to eq(50)
+        expect(plnum.volume.round(0)).to eq(50) # right answer
         expect(thzone.isVolumeDefaulted).to be true
         expect(thzone.isVolumeAutocalculated).to be true
         expect(thzone.volume).to be_empty
