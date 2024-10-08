@@ -3893,7 +3893,7 @@ RSpec.describe TBD_Tests do
         expect(thzone.isVolumeAutocalculated).to be true
         expect(thzone.volume).to be_empty
 
-        plnum.surfaces.each_with_index do |s, i|
+        plnum.surfaces.each do |s|
           next if s.outsideBoundaryCondition.downcase == "outdoors"
 
           # If a SEB plenum surface isn't facing outdoors, it's 1 of 4 "floor"
@@ -4227,7 +4227,7 @@ RSpec.describe TBD_Tests do
         expect(thzone.isVolumeAutocalculated).to be true
         expect(thzone.volume).to be_empty
 
-        plnum.surfaces.each_with_index do |s, i|
+        plnum.surfaces.each do |s|
           next if s.outsideBoundaryCondition.downcase == "outdoors"
 
           # If a SEB plenum surface isn't facing outdoors, it's 1 of 4 "floor"
