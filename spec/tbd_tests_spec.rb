@@ -13421,7 +13421,7 @@ RSpec.describe TBD_Tests do
     translator = OpenStudio::OSVersion::VersionTranslator.new
     TBD.clean!
 
-    msg   = "Empty 'polygon' (OSut::poly)"
+    msg   = "Empty 'polygon (non-collinears < 3)' (OSut::poly)"
     file  = File.join(__dir__, "files/osms/in/smalloffice.osm")
     path  = OpenStudio::Path.new(file)
     model = translator.loadModel(path)
