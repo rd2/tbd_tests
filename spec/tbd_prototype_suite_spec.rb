@@ -36,6 +36,7 @@ RSpec.describe TBD_Tests do
 
     FileUtils.mkdir_p(runs)
     nproc    = [1, Parallel.processor_count - 2].max # nb processors to use
+    #nproc = 1
     template = nil
 
     File.open(osw_, "r") do |f|
@@ -91,7 +92,7 @@ RSpec.describe TBD_Tests do
     Parallel.each(combos, in_threads: nproc) do |combo| # run E+ simulations
       type  = combo[0]
       opt   = combo[1]
-      id    = "#{type}_#{opt}"
+      id    = "#{type}_#{opt.gsub('|','-').gsub(' ', '-')}"
       dir   = File.join(runs, id)
       next if File.exist?(dir) && File.exist?(File.join(dir, "out.osw"))
 
@@ -107,6 +108,11 @@ RSpec.describe TBD_Tests do
       command = "'#{OpenStudio::getOpenStudioCLI}' run -w '#{file}'"
       puts "... running CASE #{type} | #{opt}"
       stdout, stderr, status = Open3.capture3(clean, command)
+      if !status.success?
+        puts "Error running #{file}:"
+        puts stdout
+        puts stderr
+      end
     end
 
     puts
@@ -115,7 +121,7 @@ RSpec.describe TBD_Tests do
       results = {}
 
       opts.each do |opt|
-        id   = "#{type}_#{opt}"
+        id   = "#{type}_#{opt.gsub('|','-').gsub(' ', '-')}"
         file = File.join(runs, id, "out.osw")
 
         results[opt] = {}
