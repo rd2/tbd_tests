@@ -83,7 +83,7 @@ RSpec.describe TBD_Tests do
     Parallel.each(combos, in_threads: nproc) do |combo| # run E+ simulations
       osm   = combo[0]
       opt   = combo[1]
-      id    = "#{osm}_#{opt}".gsub(".", "_")
+      id    = "#{osm}_#{opt}".gsub(/[|\s\.]/, '-')
       dir   = File.join(runs, id)
       next if File.exist?(dir) && File.exist?(File.join(dir, "out.osw"))
 
@@ -93,8 +93,8 @@ RSpec.describe TBD_Tests do
       osw[:seed_file   ]                    = osm
       osw[:weather_file]                    = epws[osm]
 
-      osw[:steps][0][:arguments][:__SKIP__] = true    if opt == "skip"
-      osw[:steps][0][:arguments][:option  ] = opt unless opt == "skip"
+      osw[:steps][1][:arguments][:__SKIP__] = true    if opt == "skip"
+      osw[:steps][1][:arguments][:option  ] = opt unless opt == "skip"
 
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
@@ -109,7 +109,7 @@ RSpec.describe TBD_Tests do
       results = {}
 
       opts.each do |opt|
-        id           = "#{osm}_#{opt}".gsub(".", "_")
+        id           = "#{osm}_#{opt}".gsub(/[|\s\.]/, '-')
         file         = File.join(runs, id, "out.osw")
         results[opt] = {}
 
@@ -120,8 +120,8 @@ RSpec.describe TBD_Tests do
 
       opts.each do |opt|
         expect(results[opt][:completed_status]).to eq("Success")
-        res  = results[opt][:steps][0][:result]
-        os   = results[opt][:steps][1][:result]
+        res  = results[opt][:steps][1][:result]
+        os   = results[opt][:steps][2][:result]
         gj   = os[:step_values].select{ |v| v[:name] == "total_site_energy" }
         puts " ------       CASE  : #{osm}"
         puts "        TBD option  : #{opt}"

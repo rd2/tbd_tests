@@ -92,7 +92,7 @@ RSpec.describe TBD_Tests do
     Parallel.each(combos, in_threads: nproc) do |combo| # run E+ simulations
       type  = combo[0]
       opt   = combo[1]
-      id    = "#{type}_#{opt.gsub('|','-').gsub(' ', '-')}"
+      id    = "#{type}_#{opt.gsub(/[|\s\.]/, '-')}"
       dir   = File.join(runs, id)
       next if File.exist?(dir) && File.exist?(File.join(dir, "out.osw"))
 
@@ -121,7 +121,7 @@ RSpec.describe TBD_Tests do
       results = {}
 
       opts.each do |opt|
-        id   = "#{type}_#{opt.gsub('|','-').gsub(' ', '-')}"
+        id   = "#{type}_#{opt.gsub(/[|\s\.]/, '-')}"
         file = File.join(runs, id, "out.osw")
 
         results[opt] = {}
