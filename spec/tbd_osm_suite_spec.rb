@@ -98,7 +98,15 @@ RSpec.describe TBD_Tests do
 
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
-      command = "'#{OpenStudio::getOpenStudioCLI}' run -w '#{file}'"
+
+      # use classic command in 3.7.0 for off by one error in OSW results:
+      # https://github.com/NREL/OpenStudio/issues/5140
+      classic = ''
+      if OpenStudio::openStudioVersion == '3.7.0'
+        classic = 'classic'
+      end
+
+      command = "'#{OpenStudio::getOpenStudioCLI}' #{classic} run -w '#{file}'"
       puts "... running CASE #{osm} | #{opt}"
       stdout, stderr, status = Open3.capture3(clean, command)
     end
@@ -119,6 +127,7 @@ RSpec.describe TBD_Tests do
       end
 
       opts.each do |opt|
+        puts opt
         expect(results[opt][:completed_status]).to eq("Success")
         res  = results[opt][:steps][1][:result]
         os   = results[opt][:steps][2][:result]
