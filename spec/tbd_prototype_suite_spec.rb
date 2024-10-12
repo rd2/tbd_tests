@@ -103,9 +103,16 @@ RSpec.describe TBD_Tests do
       osw[:steps][2][:arguments][:__SKIP__     ] = true    if opt == "skip"
       osw[:steps][2][:arguments][:option       ] = opt unless opt == "skip"
 
+      # use classic command in 3.7.0 for off by one error in OSW results:
+      # https://github.com/NREL/OpenStudio/issues/5140
+      classic = ''
+      if OpenStudio::openStudioVersion == '3.7.0'
+        classic = 'classic'
+      end
+
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
-      command = "'#{OpenStudio::getOpenStudioCLI}' run -w '#{file}'"
+      command = "'#{OpenStudio::getOpenStudioCLI}' #{classic} run -w '#{file}'"
       puts "... running CASE #{type} | #{opt}"
       stdout, stderr, status = Open3.capture3(clean, command)
       if !status.success?
