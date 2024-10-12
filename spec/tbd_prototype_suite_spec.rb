@@ -99,9 +99,9 @@ RSpec.describe TBD_Tests do
       FileUtils.mkdir_p(dir)
       osw = Marshal.load( Marshal.dump(template) )
 
-      osw[:steps][0][:arguments][:building_type] = type
-      osw[:steps][1][:arguments][:__SKIP__     ] = true    if opt == "skip"
-      osw[:steps][1][:arguments][:option       ] = opt unless opt == "skip"
+      osw[:steps][1][:arguments][:building_type] = type
+      osw[:steps][2][:arguments][:__SKIP__     ] = true    if opt == "skip"
+      osw[:steps][2][:arguments][:option       ] = opt unless opt == "skip"
 
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
@@ -133,8 +133,8 @@ RSpec.describe TBD_Tests do
 
       opts.each do |opt|
         expect(results[opt][:completed_status]).to eq("Success")
-        res  = results[opt][:steps][1][:result]
-        os   = results[opt][:steps][2][:result]
+        res  = results[opt][:steps][2][:result]
+        os   = results[opt][:steps][3][:result]
         gj   = os[:step_values].select{ |v| v[:name] == "total_site_energy" }
         puts " ------       CASE  : #{type}"
         puts "        TBD option  : #{opt}"
