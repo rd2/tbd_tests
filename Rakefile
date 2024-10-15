@@ -49,6 +49,10 @@ namespace "osm_suite" do
     puts "Cleaning TBD OSM Test Suite"
     osm = File.join(__dir__, "spec/osm_suite_runs")
     FileUtils.rmtree(osm)                                     if Dir.exist?(osm)
+    osm = File.join(__dir__, "spec/files/measures/openstudio_results")
+    FileUtils.rmtree(osm)                                     if Dir.exist?(osm)
+    tbd = File.join(__dir__, "spec/files/measures/tbd")
+    FileUtils.rmtree(tbd)                                     if Dir.exist?(tbd)
   end
 
   desc "Run TBD OSM Test Suite"
@@ -63,6 +67,8 @@ namespace "prototype_suite" do
   task :clean do
     puts "Cleaning Prototype Test Suite"
     pro = File.join(__dir__, "spec/prototype_suite_runs")
+    FileUtils.rmtree(pro)                                     if Dir.exist?(pro)
+    pro = File.join(__dir__, "spec/files/measures/create_DOE_prototype_building")
     FileUtils.rmtree(pro)                                     if Dir.exist?(pro)
   end
 
