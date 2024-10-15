@@ -4193,7 +4193,7 @@ RSpec.describe TBD_Tests do
     # Before the fix, TBD labels these same edges as ":transition". In normal
     # circumstances, this wouldn't usually affect simulation results, as both
     # :transition and :ceiling PSI-factors would normally be set to 0.0 W/K per
-    # linear meter. But users remain free to reset either value ...
+    # linear meter. But users remain free to reset either value, so ...
     2.times do |time|
       unless time.zero?
         file  = File.join(__dir__, "files/osms/in/seb.osm")
@@ -4290,7 +4290,7 @@ RSpec.describe TBD_Tests do
       expect(surfaces.size).to eq(56)
       expect(io).to be_a(Hash)
       expect(io).to have_key(:edges)
-      expect(io[:edges].size).to eq(106) # not 80, if it were UNCONDITIONED
+      expect(io[:edges].size).to eq(106) # not 80 as if it were UNCONDITIONED
 
       edges = io[:edges]
       edges = edges.reject { |s| s.to_s.include?("sill"  ) }
