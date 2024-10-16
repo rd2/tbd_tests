@@ -27,28 +27,3 @@
 # CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-require "openstudio"
-
-require "topolys"
-require "oslg"
-require "osut"
-require "psi"
-require "geo"
-require "ua"
-require "tbd_tests/version"
-
-module TBD_Tests
-  extend TBD
-
-  TOL  = TBD::TOL     # default distance tolerance (m)
-  TOL2 = TBD::TOL2    # default area tolerance (m2)
-  DBG  = TBD::DEBUG   # github.com/rd2/oslg
-  INF  = TBD::INFO    # github.com/rd2/oslg
-  WRN  = TBD::WARN    # github.com/rd2/oslg
-  ERR  = TBD::ERR     # github.com/rd2/oslg
-  FTL  = TBD::FATAL   # github.com/rd2/oslg
-  NS   = "nameString" # OpenStudio IdfObject nameString method
-
-  extend TBD
-end

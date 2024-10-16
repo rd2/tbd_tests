@@ -1,16 +1,23 @@
 {
-	"seed_file": null,
-	"weather_file": "CAN_PQ_Quebec.717140_CWEC.epw",
-	"measure_paths": [
+    "seed_file": null,
+    "weather_file": "CAN_PQ_Quebec.717140_CWEC.epw",
+    "measure_paths": [
+    "../../../lib/measures",
     "../../files/measures"
-  ],
-	"file_paths": [
+    ],
+    "file_paths": [
     ".",
     "../../files/epws",
     ""
-  ],
-	"run_directory": null,
-	"steps": [
+    ],
+    "run_directory": null,
+    "steps": [
+    {
+      "measure_dir_name": "tbd_monkey_patch",
+      "arguments": {
+        "__SKIP__": false
+      }
+    },
     {
       "measure_dir_name": "create_DOE_prototype_building",
       "arguments": {
@@ -19,20 +26,20 @@
         "climate_zone": "ASHRAE 169-2013-3B",
         "epw_file": "Not Applicable"
       }
-		},
+    },
     {
       "measure_dir_name": "tbd",
       "arguments": {
         "__SKIP__": false,
         "option": "poor (BETBG)"
       }
-		},
+    },
     {
       "measure_dir_name": "openstudio_results",
       "arguments": {
       }
-		}
-	],
-	"name": "Test File",
-	"description": "Test File"
+    }
+    ],
+    "name": "Test File",
+    "description": "Test File"
 }

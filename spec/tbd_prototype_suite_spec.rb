@@ -36,6 +36,7 @@ RSpec.describe TBD_Tests do
 
     FileUtils.mkdir_p(runs)
     nproc    = [1, Parallel.processor_count - 2].max # nb processors to use
+    #nproc = 1
     template = nil
 
     File.open(osw_, "r") do |f|
@@ -91,22 +92,34 @@ RSpec.describe TBD_Tests do
     Parallel.each(combos, in_threads: nproc) do |combo| # run E+ simulations
       type  = combo[0]
       opt   = combo[1]
-      id    = "#{type}_#{opt}"
+      id    = "#{type}_#{opt.gsub(/[|\s\.]/, '-')}"
       dir   = File.join(runs, id)
       next if File.exist?(dir) && File.exist?(File.join(dir, "out.osw"))
 
       FileUtils.mkdir_p(dir)
       osw = Marshal.load( Marshal.dump(template) )
 
-      osw[:steps][0][:arguments][:building_type] = type
-      osw[:steps][1][:arguments][:__SKIP__     ] = true    if opt == "skip"
-      osw[:steps][1][:arguments][:option       ] = opt unless opt == "skip"
+      osw[:steps][1][:arguments][:building_type] = type
+      osw[:steps][2][:arguments][:__SKIP__     ] = true    if opt == "skip"
+      osw[:steps][2][:arguments][:option       ] = opt unless opt == "skip"
+
+      # use classic command in 3.7.0 for off by one error in OSW results:
+      # https://github.com/NREL/OpenStudio/issues/5140
+      classic = ''
+      if OpenStudio::openStudioVersion == '3.7.0'
+        classic = 'classic'
+      end
 
       file    = File.join(dir, "in.osw")
       File.open(file, "w") { |f| f << JSON.pretty_generate(osw) }
-      command = "'#{OpenStudio::getOpenStudioCLI}' run -w '#{file}'"
+      command = "'#{OpenStudio::getOpenStudioCLI}' #{classic} run -w '#{file}'"
       puts "... running CASE #{type} | #{opt}"
       stdout, stderr, status = Open3.capture3(clean, command)
+      if !status.success?
+        puts "Error running #{file}:"
+        puts stdout
+        puts stderr
+      end
     end
 
     puts
@@ -115,7 +128,7 @@ RSpec.describe TBD_Tests do
       results = {}
 
       opts.each do |opt|
-        id   = "#{type}_#{opt}"
+        id   = "#{type}_#{opt.gsub(/[|\s\.]/, '-')}"
         file = File.join(runs, id, "out.osw")
 
         results[opt] = {}
@@ -127,8 +140,8 @@ RSpec.describe TBD_Tests do
 
       opts.each do |opt|
         expect(results[opt][:completed_status]).to eq("Success")
-        res  = results[opt][:steps][1][:result]
-        os   = results[opt][:steps][2][:result]
+        res  = results[opt][:steps][2][:result]
+        os   = results[opt][:steps][3][:result]
         gj   = os[:step_values].select{ |v| v[:name] == "total_site_energy" }
         puts " ------       CASE  : #{type}"
         puts "        TBD option  : #{opt}"
