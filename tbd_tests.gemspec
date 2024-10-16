@@ -27,8 +27,7 @@ Gem::Specification.new do |s|
   s.required_ruby_version    = [">= 2.5.0", "< 4"]
   s.metadata                 = {}
 
-  s.add_development_dependency "tbd",            "3.4.3"
-  s.add_development_dependency "osut",           "0.6.0"
+  s.add_development_dependency "tbd",         "3.4.3"
   s.add_development_dependency "json-schema", "~> 4"
   s.add_development_dependency "rake",        "~> 13.0"
   s.add_development_dependency "rspec",       "~> 3.11"
