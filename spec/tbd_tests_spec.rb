@@ -7463,7 +7463,7 @@ RSpec.describe TBD_Tests do
 
     # Applying 2 sets of alterations:
     #   - without, then with Frame & Dividers (F&D)
-    #   - 3 successive 20° rotations around:
+    #   - 3 successive 20deg rotations around:
     angle  = Math::PI / 9
     origin = OpenStudio::Point3d.new(0, 0, 0)
     east   = OpenStudio::Point3d.new(1, 0, 0) - origin
@@ -9075,8 +9075,8 @@ RSpec.describe TBD_Tests do
       # surface emittances. As the uprate approach relies on user-defined Ut
       # factors (inputs, as targets to meet), it also considers surface film
       # resistances. In the schematic cross-section below, let's postulate that
-      # each slope has a unique pitch: 50° (s1), 0° (s2), & 60° (s3). All three
-      # surfaces reference the same construction.
+      # each slope has a unique pitch: 50deg (s1), 0deg (s2), & 60dge (s3). All
+      # three surfaces reference the same construction.
       #
       #         s2
       #        _____
@@ -10433,8 +10433,8 @@ RSpec.describe TBD_Tests do
 
     argh[:io][:description] = "test"
     # Set up 2x heating setpoint (HSTP) "blocks":
-    #   bloc1: spaces/zones with HSTP >= 18°C
-    #   bloc2: spaces/zones with HSTP < 18°C
+    #   bloc1: spaces/zones with HSTP >= 18C
+    #   bloc2: spaces/zones with HSTP < 18C
     #   (ref: 2021 Quebec energy code 3.3. UA' trade-off methodology)
     #   ... could be generalized in the future e.g., more blocks, user-set HSTP.
     #
