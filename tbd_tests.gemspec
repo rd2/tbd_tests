@@ -52,8 +52,8 @@ Gem::Specification.new do |s|
 
     s.add_development_dependency "bundler",     "~> 2.4.10"
 
-    s.add_development_dependency "openstudio-common-measures",    "~> 0.10.0"
-    s.add_development_dependency "openstudio-model-articulation", "~> 0.10.0"
+    s.add_development_dependency "openstudio-common-measures",    "~> 0.11.0"
+    s.add_development_dependency "openstudio-model-articulation", "~> 0.11.0"
   end
 
   s.metadata["homepage_uri"   ] = s.homepage
