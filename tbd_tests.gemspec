@@ -27,7 +27,7 @@ Gem::Specification.new do |s|
   s.required_ruby_version    = [">= 2.5.0", "< 4"]
   s.metadata                 = {}
 
-  s.add_development_dependency "tbd",         "3.4.3"
+  s.add_development_dependency "tbd",         "3.4.4"
   s.add_development_dependency "json-schema", "~> 4"
   s.add_development_dependency "rake",        "~> 13.0"
   s.add_development_dependency "rspec",       "~> 3.11"
@@ -52,8 +52,8 @@ Gem::Specification.new do |s|
 
     s.add_development_dependency "bundler",     "~> 2.4.10"
 
-    s.add_development_dependency "openstudio-common-measures",    "~> 0.10.0"
-    s.add_development_dependency "openstudio-model-articulation", "~> 0.10.0"
+    s.add_development_dependency "openstudio-common-measures",    "~> 0.11.0"
+    s.add_development_dependency "openstudio-model-articulation", "~> 0.11.0"
   end
 
   s.metadata["homepage_uri"   ] = s.homepage

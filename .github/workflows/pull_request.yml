@@ -4,7 +4,6 @@ on:
   pull_request:
     branches:
       - develop
-      - seb
 
 jobs:
   test_300x:
@@ -137,6 +136,23 @@ jobs:
         echo $(ls)
         docker pull nrel/openstudio:3.8.0
         docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.8.0
+        docker exec -t test pwd
+        docker exec -t test ls
+        docker exec -t test bundle update
+        docker exec -t test bundle exec rake
+        docker exec -t test bundle exec rake suites_run
+        docker kill test
+  test_390x:
+    runs-on: ubuntu-22.04
+    steps:
+    - name: Check out repository
+      uses: actions/checkout@v2
+    - name: Run Tests
+      run: |
+        echo $(pwd)
+        echo $(ls)
+        docker pull nrel/openstudio:3.9.0
+        docker run --name test --rm -d -t -v $(pwd):/work -w /work nrel/openstudio:3.9.0
         docker exec -t test pwd
         docker exec -t test ls
         docker exec -t test bundle update
