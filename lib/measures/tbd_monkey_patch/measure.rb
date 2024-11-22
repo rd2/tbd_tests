@@ -22,7 +22,7 @@
 
 require 'openstudio-standards'
 
-if OpenstudioStandards::VERSION >= '0.6.0' and OpenstudioStandards::VERSION <= '0.6.3'
+if OpenstudioStandards::VERSION >= '0.6.0'
   module OpenstudioStandards
     # Patch this method to work with local files for due to bug fixed in:
     # https://github.com/NREL/openstudio-standards/pull/1816

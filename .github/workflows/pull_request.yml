@@ -157,4 +157,5 @@ jobs:
         docker exec -t test ls
         docker exec -t test bundle update
         docker exec -t test bundle exec rake
+        docker exec -t test bundle exec rake suites_run
         docker kill test
