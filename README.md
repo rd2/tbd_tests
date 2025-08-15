@@ -41,14 +41,14 @@ bundle exec rake suites_run
 
 Install [Docker](https://docs.docker.com/desktop/#download-and-install).
 
-Pull the OpenStudio v3.6.1 Docker image:
+Pull the OpenStudio v3.10.0 Docker image:
 ```
-docker pull nrel/openstudio:3.6.1
+docker pull nrel/openstudio:3.10.0
 ```
 
 In the root repository:
 ```
-docker run --name test --rm -d -t -v ${PWD}:/work -w /work nrel/openstudio:3.6.1
+docker run --name test --rm -d -t -v ${PWD}:/work -w /work nrel/openstudio:3.10.0
 docker exec -t test bundle update
 docker exec -t test bundle exec rake
 docker kill test
