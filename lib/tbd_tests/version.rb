@@ -1,6 +1,6 @@
 # BSD 3-Clause License
 #
-# Copyright (c) 2020-2024, Denis Bourgeois & Dan Macumber
+# Copyright (c) 2020-2025, Denis Bourgeois & Dan Macumber
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -29,5 +29,5 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 module TBD_Tests
-  VERSION = "0.2.3".freeze # TBD Tests release version
+  VERSION = "0.2.4".freeze
 end
