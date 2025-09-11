@@ -5120,8 +5120,8 @@ RSpec.describe TBD_Tests do
 
   it "can process JSON surface KHI entries" do
     translator = OpenStudio::OSVersion::VersionTranslator.new
-    expect(TBD.level     ).to eq(DBG)
-    expect(TBD.clean!    ).to eq(DBG)
+    expect(TBD.level).to eq(DBG)
+    expect(TBD.clean!).to eq(DBG)
 
     # First, basic IO tests with invalid entries.
     k = TBD::KHI.new
@@ -10273,7 +10273,7 @@ RSpec.describe TBD_Tests do
     expect(json).to have_key(:surfaces)
     io       = json[:io      ]
     surfaces = json[:surfaces]
-    expect(TBD.error?).to be true
+    expect(TBD.warn?).to be true
     expect(TBD.logs.size).to eq(2)
     expect(TBD.logs.first[:message]).to include("Zero")
     expect(TBD.logs.first[:message]).to include(": new Rsi")
@@ -11943,7 +11943,6 @@ RSpec.describe TBD_Tests do
     expect(ceiling).to_not be_empty
     ceiling = ceiling.get
 
-    # Adding a trap door, linking the core to the attic.
     sub            = {}
     sub[:id      ] = "attic trap door"
     sub[:type    ] = "Door"
@@ -11978,6 +11977,44 @@ RSpec.describe TBD_Tests do
     expect(io[:edges].size).to eq(109)
 
     file = File.join(__dir__, "files/osms/out/trapdoor.osm")
+    model.save(file, true)
+
+    # Adding skylights/wells.
+    file  = File.join(__dir__, "files/osms/in/smalloffice.osm")
+    path  = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model).to_not be_empty
+    model = model.get
+
+    srr = 0.05
+    gra = TBD.grossRoofArea(model.getSpaces)
+    tm2 = srr * gra
+    rm2 = TBD.addSkyLights(model.getSpaces, {area: tm2})
+    puts TBD.logs unless TBD.logs.empty?
+    expect(TBD.status).to be_zero
+    expect(rm2.round(2)).to eq(gra.round(2))
+
+    argh                = {}
+    argh[:option      ] = "efficient (BETBG)"
+    argh[:uprate_walls] = true
+    argh[:uprate_roofs] = true
+    argh[:wall_option ] = "ALL wall constructions"
+    argh[:roof_option ] = "ALL roof constructions"
+    argh[:wall_ut     ] = 0.215 # NECB 2020 CZ7A (RSi 4.65 / R26)
+    argh[:roof_ut     ] = 0.121 # NECB 2020 CZ7A (RSi 8.26 / R47)
+    json = TBD.process(model, argh)
+    expect(TBD.status).to be_zero
+    expect(json).to be_a(Hash)
+    expect(json).to have_key(:io)
+    expect(json).to have_key(:surfaces)
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+    expect(surfaces).to be_a(Hash)
+    expect(surfaces.size).to eq(79)
+    expect(io).to have_key(:edges)
+    expect(io[:edges].size).to eq(173)
+
+    file = File.join(__dir__, "files/osms/out/office_attic_sky.osm")
     model.save(file, true)
 
     # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
