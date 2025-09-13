@@ -8,6 +8,14 @@ RSpec.describe TBD_Tests do
   WRN  = TBD::WRN.dup
   ERR  = TBD::ERR.dup
   FTL  = TBD::FTL.dup
+  DMIN = TBD::DMIN.dup
+  DMAX = TBD::DMAX.dup
+  KMIN = TBD::KMIN.dup
+  KMAX = TBD::KMAX.dup
+  UMAX = TBD::UMAX.dup
+  UMIN = TBD::UMIN.dup
+  RMIN = TBD::RMIN.dup
+  RMAX = TBD::RMAX.dup
 
   it "can process thermal bridging and derating: LoScrigno" do
     expect(TBD.level     ).to eq(INF)
@@ -5112,9 +5120,8 @@ RSpec.describe TBD_Tests do
 
   it "can process JSON surface KHI entries" do
     translator = OpenStudio::OSVersion::VersionTranslator.new
-    expect(TBD.reset(DBG)).to eq(DBG)
-    expect(TBD.level     ).to eq(DBG)
-    expect(TBD.clean!    ).to eq(DBG)
+    expect(TBD.level).to eq(DBG)
+    expect(TBD.clean!).to eq(DBG)
 
     # First, basic IO tests with invalid entries.
     k = TBD::KHI.new
@@ -5159,15 +5166,91 @@ RSpec.describe TBD_Tests do
     expect(TBD.logs.size).to eq(1)
     expect(TBD.logs.first[:message]).to include("Missing 'point' key")
 
-
     # Valid JSON entries.
     TBD.clean!
+    version = OpenStudio.openStudioVersion.split(".").join.to_i
 
-    file  = File.join(__dir__, "files/osms/out/seb2.osm")
+    # The v1.11.5 (2016) seb.osm, shipped with OpenStudio, holds (what would now
+    # be considered as deprecated) a definition of plenum floors (i.e. ceiling
+    # tiles) generating several warnings with more recent OpenStudio versions.
+    file  = File.join(__dir__, "files/osms/in/seb.osm")
     path  = OpenStudio::Path.new(file)
     model = translator.loadModel(path)
     expect(model).to_not be_empty
     model = model.get
+
+    # "Shading Surface 4" is overlapping with a plenum exterior wall - delete.
+    sh4 = model.getShadingSurfaceByName("Shading Surface 4")
+    expect(sh4).to_not be_empty
+    sh4 = sh4.get
+    sh4.remove
+
+    plenum = model.getSpaceByName("Level 0 Ceiling Plenum")
+    expect(plenum).to_not be_empty
+    plenum = plenum.get
+
+    thzone = plenum.thermalZone
+    expect(thzone).to_not be_empty
+    thzone = thzone.get
+
+    # Before the fix.
+    unless version < 350
+      expect(plenum.isEnclosedVolume).to be true
+      expect(plenum.isVolumeDefaulted).to be true
+      expect(plenum.isVolumeAutocalculated).to be true
+    end
+
+    if version > 350 && version < 370
+      expect(plenum.volume.round(0)).to eq(234)
+    else
+      expect(plenum.volume.round(0)).to eq(0)
+    end
+
+    expect(thzone.isVolumeDefaulted).to be true
+    expect(thzone.isVolumeAutocalculated).to be true
+    expect(thzone.volume).to be_empty
+
+    plenum.surfaces.each do |s|
+      next if s.outsideBoundaryCondition.downcase == "outdoors"
+
+      # If a SEB plenum surface isn't facing outdoors, it's 1 of 4 "floor"
+      # surfaces (each facing a ceiling surface below).
+      adj = s.adjacentSurface
+      expect(adj).to_not be_empty
+      adj = adj.get
+      expect(adj.vertices.size).to eq(s.vertices.size)
+
+      # Same vertex sequence? Should be in reverse order.
+      adj.vertices.each_with_index do |vertex, i|
+        expect(TBD.same?(vertex, s.vertices.at(i))).to be true
+      end
+
+      expect(adj.surfaceType).to eq("RoofCeiling")
+      expect(s.surfaceType).to eq("RoofCeiling")
+      expect(s.setSurfaceType("Floor")).to be true
+      expect(s.setVertices(s.vertices.reverse)).to be true
+
+      # Vertices now in reverse order.
+      adj.vertices.reverse.each_with_index do |vertex, i|
+        expect(TBD.same?(vertex, s.vertices.at(i))).to be true
+      end
+    end
+
+    # After the fix.
+    unless version < 350
+      expect(plenum.isEnclosedVolume).to be true
+      expect(plenum.isVolumeDefaulted).to be true
+      expect(plenum.isVolumeAutocalculated).to be true
+    end
+
+    expect(plenum.volume.round(0)).to eq(50) # right answer
+    expect(thzone.isVolumeDefaulted).to be true
+    expect(thzone.isVolumeAutocalculated).to be true
+    expect(thzone.volume).to be_empty
+
+    file = File.join(__dir__, "files/osms/out/seb2.osm")
+    model.save(file, true)
+
 
     argh               = {}
     argh[:option     ] = "(non thermal bridging)"
@@ -5197,6 +5280,29 @@ RSpec.describe TBD_Tests do
 
       expect(surface[:heatloss]).to be_within(TOL).of(3.5)
     end
+
+    # Retrieve :parapet edges along the "Open Area" plenum.
+    open = model.getSpaceByName("Open area 1")
+    expect(open).to_not be_empty
+    open = open.get
+
+    open_roofs = TBD.roofs(open)
+    expect(open_roofs.size).to eq(1)
+    open_roof  = open_roofs.first
+    roof_id    = open_roof.nameString
+    expect(roof_id).to eq("Level 0 Open area 1 Ceiling Plenum RoofCeiling")
+
+    # There are only 2 types of edges along the "Open Area" plenum roof:
+    #   1. (5x) convex :parapet edges, and
+    #   2. (5x) transition edges (shared with neighbouring flat roof surfaces).
+    roof_edges  = io[:edges].select { |edg| edg[:surfaces].include?(roof_id) }
+    parapets    = roof_edges.select { |edg| edg[:type] == :parapetconvex }
+    transitions = roof_edges.select { |edg| edg[:type] == :transition }
+    expect(parapets.size).to eq(5)
+    expect(transitions.size).to eq(5)
+    expect(roof_edges.size).to eq(parapets.size + transitions.size)
+
+    roof_edges.each { |edg| expect(edg[:surfaces].size).to eq(2) }
   end
 
   it "can process JSON surface KHI & PSI entries" do
@@ -7608,23 +7714,20 @@ RSpec.describe TBD_Tests do
     expect(clerestory.setSubSurfaceType("FixedWindow")).to be true
     # ... reminder: set subsurface type AFTER setting its parent surface.
 
-    # A new, highly-conductive material (RSi = 0.001 m2.K/W) - the OS min.
+    # A new, highly-conductive material.
     material = OpenStudio::Model::MasslessOpaqueMaterial.new(model)
     material.setName("poor material")
     expect(material.nameString).to eq("poor material")
-    expect(material.setThermalResistance(0.001)).to be true
-    expect(material.thermalResistance).to be_within(0.0001).of(0.001)
+    expect(material.setThermalResistance(RMIN)).to be true
     mat = OpenStudio::Model::MaterialVector.new
     mat << material
 
-    # A 'standard' variant (also gives RSi = 0.001 m2.K/W)
+    # A 'standard' variant (RMIN)
     material2 = OpenStudio::Model::StandardOpaqueMaterial.new(model)
     material2.setName("poor material2")
     expect(material2.nameString).to eq("poor material2")
-    expect(material2.setThermalConductivity(3.0)).to be true
-    expect(material2.thermalConductivity).to be_within(TOL).of(3.0)
-    expect(material2.setThickness(0.003)).to be true
-    expect(material2.thickness).to be_within(0.001).of(0.003)
+    expect(material2.setThermalConductivity(KMAX)).to be true
+    expect(material2.setThickness(DMIN)).to be true
     mat2 = OpenStudio::Model::MaterialVector.new
     mat2 << material2
 
@@ -7741,13 +7844,13 @@ RSpec.describe TBD_Tests do
     expect(surfaces["Office Left Wall"]).to have_key(:edges)
     expect(surfaces["Fine Storage Right Wall"]).to have_key(:edges)
 
-    # TBD.logs.each { |log| puts log[:msg] }
-    #   'clerestory' vertex count (3 or 4)
-    #   Can't override 'regular (BETBG)' PSI set  - skipping
-    #   'Office Front Wall' KHI 'beam' mismatch
-    #   'Office Front Wall' edge PSI set mismatch - skipping
-    #   Can't assign 180.007 W/K to 'Office Left Wall' - too conductive
-    #   Can't derate 'Fine Storage Right Wall' - material already derated
+    # TBD.logs.each { |log| puts log[:message] }
+    # Skipping 'clerestory': vertex # 3 or 4 (TBD::properties)
+    # 'regular (BETBG)': existing PSI set (TBD::append)
+    # JSON/KHI surface 'Office Front Wall' 'beam' (TBD::inputs)
+    # Missing edge PSI detailed (TBD::inputs)
+    # Won't derate 'poor construction tbd 1': tagged as derated (TBD::derate)
+    # Won't assign 197.714 W/K to 'Office Left Wall': too conductive (TBD::derate)
 
     # Despite input file (non-fatal) errors, TBD successfully processes thermal
     # bridges and derates OSM construction materials by falling back on defaults
@@ -7792,17 +7895,17 @@ RSpec.describe TBD_Tests do
     expect(layer).to_not be_empty
     layer = layer.get
     expect(layer.name.get).to eq("Office Left Wall m tbd")
-    expect(layer.thermalConductivity).to be_within(0.1).of(3.0)
-    expect(layer.thickness).to be_within(0.001).of(0.003)
+    expect(layer.thermalConductivity).to be_within(0.1).of(KMAX)
+    expect(layer.thickness).to be_within(0.001).of(DMIN)
 
     # Regardless of the targetted material type ('standard' vs 'massless'), TBD
-    # will ensure a minimal RSi value of 0.001 m2.K/W, i.e. no derating despite
+    # will ensure a minimal RSi value (see OSut RMIN), i.e. no derating despite
     # the surface having thermal bridges.
     expect(surfaces["Office Left Wall"]).to have_key(:heatloss)
     expect(surfaces["Office Left Wall"]).to have_key(:r_heatloss)
 
-    expect(surfaces["Office Left Wall"][:heatloss  ]).to be_within(0.1).of(180)
-    expect(surfaces["Office Left Wall"][:r_heatloss]).to be_within(0.1).of(180)
+    expect(surfaces["Office Left Wall"][:heatloss  ]).to be_within(0.1).of(197.7)
+    expect(surfaces["Office Left Wall"][:r_heatloss]).to be_within(0.1).of(197.7)
 
     expect(surfaces["Fine Storage Right Wall"]).to     have_key(:heatloss)
     expect(surfaces["Fine Storage Right Wall"]).to_not have_key(:r_heatloss)
@@ -7825,7 +7928,7 @@ RSpec.describe TBD_Tests do
     # Mimics (somewhat) the TBD 'measure.rb' method 'exitTBD()'
     # ... should generate a 'logs' entry at the  of the JSON output file.
     status = TBD.msg(TBD.status)
-    status = TBD.msg(INF       ) if TBD.status.zero?
+    status = TBD.msg(INF) if TBD.status.zero?
 
     tbd_log = { date: Time.now, status: status }
 
@@ -10089,8 +10192,8 @@ RSpec.describe TBD_Tests do
     # linear thermal bridges is very high given the limited exposed (gross)
     # area. If area-weighted, derating the insulation layer of the referenced
     # wall construction above would entail factoring in this extra thermal
-    # conductance of ~0.309 W/m2•K (84.6/273.6), which would reduce the
-    # insulation thickness quite significantly.
+    # conductance of ~0.309 W/m2•K (84.6/273.6), which would increase the
+    # insulation conductivity quite significantly.
     #
     #   Ut = Uo + ( ∑psi • L )/A
     #
@@ -10143,7 +10246,9 @@ RSpec.describe TBD_Tests do
     #
     # The method exits with an ERROR in 2x cases:
     #   - calculated Uo is negative, i.e. ( ∑psi • L )/A > 0.277
-    #   - calculated layer r violates E+ material constraints (e.g. too thin)
+    #   - calculated layer r violates E+ material constraints, e.g.
+    #     - too conductive
+    #     - too thin
 
     # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
     # Retrying the previous example, yet requesting uprating calculations:
@@ -10168,7 +10273,7 @@ RSpec.describe TBD_Tests do
     expect(json).to have_key(:surfaces)
     io       = json[:io      ]
     surfaces = json[:surfaces]
-    expect(TBD.error?).to be true
+    expect(TBD.warn?).to be true
     expect(TBD.logs.size).to eq(2)
     expect(TBD.logs.first[:message]).to include("Zero")
     expect(TBD.logs.first[:message]).to include(": new Rsi")
@@ -10232,10 +10337,10 @@ RSpec.describe TBD_Tests do
       insul = insul.get
       expect(insul.nameString).to include(" uprated m tbd")
 
-      expect(insul.thermalConductivity).to be_within(0.0001).of(0.0432)
-      th1 = (insul.thickness - 0.191).abs < 0.001 # derated layer Rsi 4.42
-      th2 = (insul.thickness - 0.186).abs < 0.001 # derated layer Rsi 4.31
-      expect(th1 || th2).to be true # depending if 'short' or 'long' walls
+      k1 = (insul.thermalConductivity - 0.0261).round(4) == 0
+      k2 = (insul.thermalConductivity - 0.0253).round(4) == 0
+      expect(k1 || k2).to be true
+      expect(insul.thickness).to be_within(0.0001).of(0.1120)
     end
 
     walls.each do |wall|
@@ -10310,21 +10415,45 @@ RSpec.describe TBD_Tests do
     # layer thickness limit, harmonizing with EnergyPlus:
     #
     #   https://github.com/NREL/OpenStudio/pull/4622
-    if OpenStudio.openStudioVersion.split(".").join.to_i < 350
-      expect(TBD.error?).to be true
-      expect(TBD.logs).to_not be_empty
-      expect(TBD.logs.size).to eq(2)
+    #
+    # This didn't mean EnergyPlus wouldn't halt a simulation due to invalid CTF
+    # calculations - happens with very thick materials. Recent 2025 TBD changes
+    # have removed this check. Users of pre-v3.5.X OpenStudio should expect
+    # OS-generated simulation failures when uprating (extremes cases). Achtung!
+    expect(TBD.status).to be_zero
+    expect(argh).to have_key(:wall_uo)
+    expect(argh[:wall_uo]).to be_within(0.0001).of(UMIN) # RSi 100 (R568)
 
-      expect(TBD.logs.first[:message]).to include("Invalid")
-      expect(TBD.logs.first[:message]).to include("Can't uprate ")
-      expect(TBD.logs.last[:message ]).to include("Unable to uprate")
+    nb = 0
 
-      expect(argh).to_not have_key(:wall_uo)
-    else
-      expect(TBD.status).to be_zero
-      expect(argh).to have_key(:wall_uo)
-      expect(argh[:wall_uo]).to be_within(0.0001).of(0.0089) # RSi 112 (R638)
+    model.getSurfaces.each do |s|
+      next unless s.surfaceType.downcase == "wall"
+
+      c = s.construction
+      expect(c).to_not be_empty
+      c = c.get.to_LayeredConstruction
+      next if c.empty?
+
+      c = c.get
+      next unless c.nameString.include?("c tbd")
+
+      lyr = TBD.insulatingLayer(c)
+      expect(lyr).to be_a(Hash)
+      expect(lyr).to have_key(:type)
+      expect(lyr).to have_key(:index)
+      expect(lyr).to have_key(:r)
+      expect(lyr[:type]).to eq(:standard)
+      expect(lyr[:index]).to be_between(0, c.numLayers)
+      insul = c.getLayer(lyr[:index])
+      insul = insul.to_StandardOpaqueMaterial
+      expect(insul).to_not be_empty
+      insul = insul.get
+      expect(insul.thickness).to be_within(TOL).of(1.00)
+
+      nb += 1
     end
+
+    expect(nb).to eq(4)
   end
 
   it "can pre-process UA parameters" do
@@ -10643,10 +10772,10 @@ RSpec.describe TBD_Tests do
     expect(bloc1[:pro][:grade    ]).to be_within(0.1).of(  29.8)
     expect(bloc1[:pro][:other    ]).to be_within(0.1).of(   0.0)
 
-    bloc1_pro_UA = bloc1[:pro].values.reduce(:+)
-    bloc1_ref_UA = bloc1[:ref].values.reduce(:+)
-    bloc2_pro_UA = bloc2[:pro].values.reduce(:+)
-    bloc2_ref_UA = bloc2[:ref].values.reduce(:+)
+    bloc1_pro_UA = bloc1[:pro].values.sum
+    bloc1_ref_UA = bloc1[:ref].values.sum
+    bloc2_pro_UA = bloc2[:pro].values.sum
+    bloc2_ref_UA = bloc2[:ref].values.sum
 
     expect(bloc1_pro_UA).to be_within(0.1).of( 214.8)
     expect(bloc1_ref_UA).to be_within(0.1).of( 107.2)
@@ -11573,319 +11702,6 @@ RSpec.describe TBD_Tests do
     model.save(file, true)
   end
 
-  it "can test 5ZoneNoHVAC (failed) uprating" do
-    translator = OpenStudio::OSVersion::VersionTranslator.new
-    TBD.clean!
-
-    walls = []
-    id    = "ASHRAE 189.1-2009 ExtWall Mass ClimateZone 5"
-    file  = File.join(__dir__, "files/osms/in/5ZoneNoHVAC.osm")
-    path  = OpenStudio::Path.new(file)
-    model = translator.loadModel(path)
-    expect(model).to_not be_empty
-    model = model.get
-
-    # Get geometry data for testing (4x exterior walls, same construction).
-    construction = nil
-
-    model.getSurfaces.each do |s|
-      next unless s.surfaceType == "Wall"
-      next unless s.outsideBoundaryCondition == "Outdoors"
-
-      walls << s.nameString
-      c = s.construction
-      expect(c).to_not be_empty
-      c = c.get.to_LayeredConstruction
-      expect(c).to_not be_empty
-      c = c.get
-
-      construction = c if construction.nil?
-      expect(c).to eq(construction)
-    end
-
-    expect(walls.size              ).to eq( 4)
-    expect(construction.nameString ).to eq(id)
-    expect(construction.layers.size).to eq( 4)
-
-    insulation = construction.layers[2].to_StandardOpaqueMaterial
-    expect(insulation).to_not be_empty
-    insulation = insulation.get
-    expect(insulation.thickness).to be_within(0.0001).of(0.0794)
-    expect(insulation.thermalConductivity).to be_within(0.0001).of(0.0432)
-    original_r = insulation.thickness / insulation.thermalConductivity
-    expect(original_r).to be_within(TOL).of(1.8380)
-
-    argh = { option: "efficient (BETBG)" } # all PSI-factors @ 0.2 W/K•m
-
-    json     = TBD.process(model, argh)
-    expect(json).to be_a(Hash)
-    expect(json).to have_key(:io)
-    expect(json).to have_key(:surfaces)
-    io       = json[:io      ]
-    surfaces = json[:surfaces]
-    expect(TBD.status).to be_zero
-    expect(TBD.logs).to be_empty
-
-    walls.each do |wall|
-      expect(surfaces).to have_key(wall)
-      expect(surfaces[wall]).to have_key(:heatloss)
-
-      long  = (surfaces[wall][:heatloss] - 27.746).abs < TOL # 40 metres wide
-      short = (surfaces[wall][:heatloss] - 14.548).abs < TOL # 20 metres wide
-      expect(long || short).to be true
-    end
-
-    # The 4-sided model has 2x "long" front/back + 2x "short" side exterior
-    # walls, with a total TBD-calculated heat loss (from thermal bridging) of:
-    #
-    #   2x 27.746 W/K + 2x 14.548 W/K = ~84.588 W/K
-    #
-    # Spread over ~273.6 m2 of gross wall area, that is A LOT! Why (given the
-    # "efficient" PSI-factors)? Each wall has a long "strip" window, almost the
-    # full wall width (reaching to within a few millimetres of each corner).
-    # This ~slices the host wall into 2x very narrow strips. Although the
-    # thermal bridging details are considered "efficient", the total length of
-    # linear thermal bridges is very high given the limited exposed (gross)
-    # area. If area-weighted, derating the insulation layer of the referenced
-    # wall construction above would entail factoring in this extra thermal
-    # conductance of ~0.309 W/m2•K (84.6/273.6), which would reduce the
-    # insulation thickness quite significantly.
-    #
-    #   Ut = Uo + ( ∑psi • L )/A
-    #
-    # Expressed otherwise:
-    #
-    #   Ut = Uo + 0.309
-    #
-    # So what initial Uo factor should the construction offer (prior to
-    # derating) to ensure compliance with NECB2017/2020 prescriptive
-    # requirements (one of the few energy codes with prescriptive Ut
-    # requirements)? For climate zone 7, the target Ut is 0.210 W/m2•K (Rsi
-    # 4.76 m2•K/W or R27). Taking into account air film resistances and
-    # non-insulating layer resistances (e.g. ~Rsi 1 m2•K/W), the prescribed
-    # (max) layer Ut becomes ~0.277 (Rsi 3.6 or R20.5).
-    #
-    #   0.277 = Uo? + 0.309
-    #
-    # Duh-oh! Even with an infinitely thick insulation layer (Uo ~= 0), it
-    # would be impossible to reach NECB2017/2020 prescritive requirements with
-    # "efficient" thermal breaks. Solutions? Eliminate windows :\ Otherwise,
-    # further improve detailing as to achieve ~0.1 W/K per linear metre
-    # (easier said than done). Here, an average PSI-factor of 0.150 W/K per
-    # linear metre (i.e. ~76.1 W/K instead of ~84.6 W/K) still won't cut it
-    # for a Uo of 0.01 W/m2•K (Rsi 100 or R568). Instead, an average PSI-factor
-    # of 0.090 (~45.6 W/K, very high performance) would allow compliance for a
-    # Uo of 0.1 W/m2•K (Rsi 10 or R57, ... $$$).
-    #
-    # Long story short: there will inevitably be cases where TBD is unable to
-    # "uprate" a construction prior to "derating". This is neither a TBD bug
-    # nor an RP-1365/ISO model limitation. It is simply "bad" input, although
-    # likely unintentional. Nevertheless, TBD should exit in such cases with
-    # an ERROR message.
-    #
-    # And if one were to instead model each of the OpenStudio walls described
-    # above as 2x distinct OpenStudio surfaces? e.g.:
-    #   - 95% of exposed wall area Uo 0.01 W/m2•K
-    #   - 5% of exposed wall area as a "thermal bridge" strip (~5.6 W/m2•K *)
-    #
-    #     * (76.1 W/K over 5% of 273.6 m2)
-    #
-    # One would still consistently arrive at the same area-weighted average
-    # Ut, in this case 0.288 (> 0.277). No free lunches.
-    #
-    # ---
-    #
-    # TBD's "uprating" method reorders the equation and attempts the
-    # following:
-    #
-    #   Uo = 0.277 - ( ∑psi • L )/A
-    #
-    # The method exits with an ERROR in 2x cases:
-    #   - calculated Uo is negative, i.e. ( ∑psi • L )/A > 0.277
-    #   - calculated layer r violates E+ material constraints (e.g. too thin)
-
-    # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
-    # Retrying the previous example, yet requesting uprating calculations:
-    TBD.clean!
-
-    model = translator.loadModel(path)
-    expect(model).to_not be_empty
-    model = model.get
-
-    argh                = {}
-    argh[:option      ] = "efficient (BETBG)" # all PSI-factors @ 0.2 W/K•m
-    argh[:uprate_walls] = true
-    argh[:uprate_roofs] = true
-    argh[:wall_option ] = "ALL wall constructions"
-    argh[:roof_option ] = "ALL roof constructions"
-    argh[:wall_ut     ] = 0.210 # NECB CZ7 2017 (RSi 4.76 / R27)
-    argh[:roof_ut     ] = 0.138 # NECB CZ7 2017 (RSi 7.25 / R41)
-
-    json     = TBD.process(model, argh)
-    expect(json).to be_a(Hash)
-    expect(json).to have_key(:io)
-    expect(json).to have_key(:surfaces)
-    io       = json[:io      ]
-    surfaces = json[:surfaces]
-    expect(TBD.error?).to be true
-    expect(TBD.logs.size).to eq(2)
-    expect(TBD.logs.first[:message]).to include("Zero")
-    expect(TBD.logs.first[:message]).to include(": new Rsi")
-    expect(TBD.logs.last[ :message]).to include("Unable to uprate")
-
-    expect(argh).to_not have_key(:wall_uo)
-    expect(argh).to     have_key(:roof_uo)
-    expect(argh[:roof_uo]).to_not be_nil
-    expect(argh[:roof_uo]).to be_within(TOL).of(0.118) # RSi 8.47 (R48)
-
-    # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
-    # Final attempt, with PSI-factors of 0.09 W/K per linear metre (JSON file).
-    TBD.clean!
-
-    walls = []
-    model = translator.loadModel(path)
-    expect(model).to_not be_empty
-    model = model.get
-
-    argh                = {}
-    argh[:io_path     ] = File.join(__dir__, "../json/tbd_5ZoneNoHVAC.json")
-    argh[:schema_path ] = File.join(__dir__, "../tbd.schema.json")
-    argh[:uprate_walls] = true
-    argh[:uprate_roofs] = true
-    argh[:wall_option ] = "ALL wall constructions"
-    argh[:roof_option ] = "ALL roof constructions"
-    argh[:wall_ut     ] = 0.210 # NECB CZ7 2017 (RSi 4.76 / R27)
-    argh[:roof_ut     ] = 0.138 # NECB CZ7 2017 (RSi 7.25 / R41)
-
-    json      = TBD.process(model, argh)
-    expect(json).to be_a(Hash)
-    expect(json).to have_key(:io)
-    expect(json).to have_key(:surfaces)
-    io        = json[:io      ]
-    surfaces  = json[:surfaces]
-    expect(TBD.status).to be_zero
-
-    expect(argh).to have_key(:wall_uo)
-    expect(argh).to have_key(:roof_uo)
-    expect(argh[:wall_uo]).to_not be_nil
-    expect(argh[:roof_uo]).to_not be_nil
-    expect(argh[:wall_uo]).to be_within(TOL).of(0.086) # RSi 11.63 (R66)
-    expect(argh[:roof_uo]).to be_within(TOL).of(0.129) # RSi  7.75 (R44)
-
-    model.getSurfaces.each do |s|
-      next unless s.surfaceType == "Wall"
-      next unless s.outsideBoundaryCondition == "Outdoors"
-
-      walls << s.nameString
-      c = s.construction
-      expect(c).to_not be_empty
-      c = c.get.to_LayeredConstruction
-      expect(c).to_not be_empty
-      c = c.get
-
-      expect(c.nameString).to include(" c tbd")
-      expect(c.layers.size).to eq(4)
-
-      insul = c.layers[2].to_StandardOpaqueMaterial
-      expect(insul).to_not be_empty
-      insul = insul.get
-      expect(insul.nameString).to include(" uprated m tbd")
-
-      expect(insul.thermalConductivity).to be_within(0.0001).of(0.0432)
-      th1 = (insul.thickness - 0.191).abs < 0.001 # derated layer Rsi 4.42
-      th2 = (insul.thickness - 0.186).abs < 0.001 # derated layer Rsi 4.31
-      expect(th1 || th2).to be true # depending if 'short' or 'long' walls
-    end
-
-    walls.each do |wall|
-      expect(surfaces).to have_key(wall)
-      expect(surfaces[wall]).to have_key(:r) # uprated, non-derated layer Rsi
-      expect(surfaces[wall]).to have_key(:u) # uprated, non-derated assembly
-      expect(surfaces[wall][:r]).to be_within(0.001).of(11.205) # R64
-      expect(surfaces[wall][:u]).to be_within(0.001).of( 0.086) # R66
-    end
-
-    # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
-    # Realistic, BTAP-costed PSI-factors.
-    TBD.clean!
-
-    jpath = "../json/tbd_5ZoneNoHVAC_btap.json"
-    file  = File.join(__dir__, "files/osms/in/5ZoneNoHVAC.osm")
-    path  = OpenStudio::Path.new(file)
-    model = translator.loadModel(path)
-    expect(model).to_not be_empty
-    model = model.get
-
-    # Assign (missing) space types.
-    north = model.getSpaceByName("Story 1 North Perimeter Space")
-    east  = model.getSpaceByName("Story 1 East Perimeter Space")
-    south = model.getSpaceByName("Story 1 South Perimeter Space")
-    west  = model.getSpaceByName("Story 1 West Perimeter Space")
-    core  = model.getSpaceByName("Story 1 Core Space")
-
-    expect(north).to_not be_empty
-    expect(east ).to_not be_empty
-    expect(south).to_not be_empty
-    expect(west ).to_not be_empty
-    expect(core ).to_not be_empty
-
-    north = north.get
-    east  = east.get
-    south = south.get
-    west  = west.get
-    core  = core.get
-
-    audience  = OpenStudio::Model::SpaceType.new(model)
-    warehouse = OpenStudio::Model::SpaceType.new(model)
-    offices   = OpenStudio::Model::SpaceType.new(model)
-    sales     = OpenStudio::Model::SpaceType.new(model)
-    workshop  = OpenStudio::Model::SpaceType.new(model)
-
-    audience.setName("Audience - auditorium")
-    warehouse.setName("Warehouse - fine")
-    offices.setName("Office - enclosed")
-    sales.setName("Sales area")
-    workshop.setName("Workshop space")
-
-    expect(north.setSpaceType(audience )).to be true
-    expect( east.setSpaceType(warehouse)).to be true
-    expect(south.setSpaceType(offices  )).to be true
-    expect( west.setSpaceType(sales    )).to be true
-    expect( core.setSpaceType(workshop )).to be true
-
-    argh                = {}
-    argh[:io_path     ] = File.join(__dir__, jpath)
-    argh[:schema_path ] = File.join(__dir__, "../tbd.schema.json")
-    argh[:uprate_walls] = true
-    argh[:wall_option ] = "ALL wall constructions"
-    argh[:wall_ut     ] = 0.210 # NECB CZ7 2017 (RSi 4.76 / R41)
-
-    TBD.process(model, argh)
-    expect(argh).to_not have_key(:roof_uo)
-
-    # OpenStudio prior to v3.5.X had a 3m maximum layer thickness, reflecting a
-    # previous v8.8 EnergyPlus constraint. TBD caught such cases when uprating
-    # (as per NECB requirements). From v3.5.0+, OpenStudio dropped the maximum
-    # layer thickness limit, harmonizing with EnergyPlus:
-    #
-    #   https://github.com/NREL/OpenStudio/pull/4622
-    if OpenStudio.openStudioVersion.split(".").join.to_i < 350
-      expect(TBD.error?).to be true
-      expect(TBD.logs).to_not be_empty
-      expect(TBD.logs.size).to eq(2)
-
-      expect(TBD.logs.first[:message]).to include("Invalid")
-      expect(TBD.logs.first[:message]).to include("Can't uprate ")
-      expect(TBD.logs.last[:message ]).to include("Unable to uprate")
-
-      expect(argh).to_not have_key(:wall_uo)
-    else
-      expect(TBD.status).to be_zero
-      expect(argh).to have_key(:wall_uo)
-      expect(argh[:wall_uo]).to be_within(0.0001).of(0.0089) # RSi 112 (R638)
-    end
-  end
-
   it "can test Hash inputs" do
     translator = OpenStudio::OSVersion::VersionTranslator.new
     TBD.clean!
@@ -11980,7 +11796,6 @@ RSpec.describe TBD_Tests do
   it "can check for attics vs plenums" do
     translator = OpenStudio::OSVersion::VersionTranslator.new
     TBD.clean!
-
     # Outdoor-facing surfaces of UNCONDITIONED spaces are never derated by TBD.
     # Yet determining whether an OpenStudio space should be considered
     # UNCONDITIONED (e.g. an attic), rather than INDIRECTLYCONDITIONED
@@ -12112,6 +11927,95 @@ RSpec.describe TBD_Tests do
     end
 
     expect(attic.additionalProperties.resetFeature(key)).to be true
+
+    # Adding a sub surface between UNCONDITIONED Attic & CONDITIONED Core.
+    file  = File.join(__dir__, "files/osms/in/smalloffice.osm")
+    path  = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model).to_not be_empty
+    model = model.get
+
+    floor = model.getSurfaceByName("Attic_floor_core")
+    expect(floor).to_not be_empty
+    floor = floor.get
+
+    ceiling = floor.adjacentSurface
+    expect(ceiling).to_not be_empty
+    ceiling = ceiling.get
+
+    sub            = {}
+    sub[:id      ] = "attic trap door"
+    sub[:type    ] = "Door"
+    sub[:assembly] = TBD.genConstruction(model, {type: :door})
+    sub[:width   ] = 1.0
+    sub[:height  ] = 1.0
+    expect(TBD.addSubs(floor, sub, false, true, true)).to be true
+    expect(TBD.addSubs(ceiling, sub, false, true, false)).to be true
+    expect(floor.subSurfaces.size).to eq(1)
+    expect(ceiling.subSurfaces.size).to eq(1)
+    trap = floor.subSurfaces.first
+    door = ceiling.subSurfaces.first
+    expect(trap.setAdjacentSubSurface(door)).to be true
+    expect(door.setAdjacentSubSurface(trap)).to be true
+    expect(trap.adjacentSubSurface).to_not be_empty
+    expect(door.adjacentSubSurface).to_not be_empty
+    expect(trap.adjacentSubSurface.get).to eq(door)
+    expect(door.adjacentSubSurface.get).to eq(trap)
+
+    argh = { option: "code (Quebec)" }
+    json = TBD.process(model, argh)
+    puts TBD.logs
+    expect(TBD.status).to be_zero
+    expect(json).to be_a(Hash)
+    expect(json).to have_key(:io)
+    expect(json).to have_key(:surfaces)
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+    expect(surfaces).to be_a(Hash)
+    expect(surfaces.size).to eq(43)
+    expect(io).to have_key(:edges)
+    expect(io[:edges].size).to eq(109)
+
+    file = File.join(__dir__, "files/osms/out/trapdoor.osm")
+    model.save(file, true)
+
+    # Adding skylights/wells.
+    file  = File.join(__dir__, "files/osms/in/smalloffice.osm")
+    path  = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model).to_not be_empty
+    model = model.get
+
+    srr = 0.05
+    gra = TBD.grossRoofArea(model.getSpaces)
+    tm2 = srr * gra
+    rm2 = TBD.addSkyLights(model.getSpaces, {area: tm2})
+    puts TBD.logs unless TBD.logs.empty?
+    expect(TBD.status).to be_zero
+    expect(rm2.round(2)).to eq(gra.round(2))
+
+    argh                = {}
+    argh[:option      ] = "efficient (BETBG)"
+    argh[:uprate_walls] = true
+    argh[:uprate_roofs] = true
+    argh[:wall_option ] = "ALL wall constructions"
+    argh[:roof_option ] = "ALL roof constructions"
+    argh[:wall_ut     ] = 0.215 # NECB 2020 CZ7A (RSi 4.65 / R26)
+    argh[:roof_ut     ] = 0.121 # NECB 2020 CZ7A (RSi 8.26 / R47)
+    json = TBD.process(model, argh)
+    expect(TBD.status).to be_zero
+    expect(json).to be_a(Hash)
+    expect(json).to have_key(:io)
+    expect(json).to have_key(:surfaces)
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+    expect(surfaces).to be_a(Hash)
+    expect(surfaces.size).to eq(79)
+    expect(io).to have_key(:edges)
+    expect(io[:edges].size).to eq(173)
+
+    file = File.join(__dir__, "files/osms/out/office_attic_sky.osm")
+    model.save(file, true)
 
     # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
     # 5Zone_2 test case (as INDIRECTLYCONDITIONED plenum).
@@ -12320,7 +12224,7 @@ RSpec.describe TBD_Tests do
     File.open(file, "w") { |f| f.puts out }
 
 
-    # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
+    # --- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- --- #
     # The following variations of the 'FullServiceRestaurant' (v3.2.1) are
     # snapshots of incremental development of the same model. For each step,
     # the tests illustrate how TBD ends up considering the unoccupied space
@@ -12899,6 +12803,156 @@ RSpec.describe TBD_Tests do
 
       expect(area).to be_within(TOL).of(569.50)
     end
+
+    # --- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- --- #
+    # Add skylight (+ skylight well) to corrected SEB model.
+    TBD.clean!
+    file  = File.join(__dir__, "files/osms/out/seb2.osm")
+    path  = OpenStudio::Path.new(file)
+    model = translator.loadModel(path)
+    expect(model).to_not be_empty
+    model = model.get
+
+    entry   = model.getSpaceByName("Entry way 1")
+    office  = model.getSpaceByName("Small office 1")
+    open    = model.getSpaceByName("Open area 1")
+    utility = model.getSpaceByName("Utility 1")
+    plenum  = model.getSpaceByName("Level 0 Ceiling Plenum")
+    expect(entry).to_not be_empty
+    expect(office).to_not be_empty
+    expect(open).to_not be_empty
+    expect(utility).to_not be_empty
+    expect(plenum).to_not be_empty
+    entry   = entry.get
+    office  = office.get
+    open    = open.get
+    utility = utility.get
+    plenum  = plenum.get
+    expect(plenum.partofTotalFloorArea).to be false
+    expect(TBD.unconditioned?(plenum)).to be false
+
+    open_roofs = TBD.roofs(open)
+    expect(open_roofs.size).to eq(1)
+    open_roof = open_roofs.first
+    roof_id   = open_roof.nameString
+    expect(roof_id).to eq("Level 0 Open area 1 Ceiling Plenum RoofCeiling")
+
+    srr = 0.05
+    gra = TBD.grossRoofArea(model.getSpaces)
+    tm2 = srr * gra
+    rm2 = TBD.addSkyLights(model.getSpaces, {area: tm2})
+    puts TBD.logs unless TBD.logs.empty?
+    expect(TBD.status).to be_zero
+    expect(rm2.round(2)).to eq(gra.round(2))
+
+    entry_skies   = TBD.facets(entry, "Outdoors", "Skylight")
+    office_skies  = TBD.facets(office, "Outdoors", "Skylight")
+    utility_skies = TBD.facets(utility, "Outdoors", "Skylight")
+    open_skies    = TBD.facets(open, "Outdoors", "Skylight")
+
+    expect(entry_skies).to be_empty
+    expect(office_skies).to be_empty
+    expect(utility_skies).to be_empty
+    expect(open_skies.size).to eq(1)
+    open_sky = open_skies.first
+    sky_id   = open_sky.nameString
+    expect(sky_id).to eq("0:0:0:Open area 1:0")
+
+    skm2 = open_sky.grossArea
+    expect((skm2 / rm2).round(2)).to eq(srr)
+
+    # Assign construction to new skylights.
+    construction = TBD.genConstruction(model, {type: :skylight, uo: 2.8})
+    expect(open_sky.setConstruction(construction)).to be true
+    puts TBD.logs unless TBD.logs.empty?
+    expect(TBD.status).to be_zero
+
+    file = File.join(__dir__, "files/osms/out/seb2_sky.osm")
+    model.save(file, true)
+
+    open_well  = open_sky.surface
+    expect(open_well).to_not be_empty
+    open_well  = open_well.get
+    expect(open_well.surfaceType.downcase).to eq("roofceiling")
+    well_id    = open_well.nameString
+    expect(well_id).to eq("0:0:0:Open area 1")
+
+    argh               = {}
+    argh[:option     ] = "regular (BETBG)"
+    argh[:schema_path] = File.join(__dir__, "../tbd.schema.json")
+
+    json     = TBD.process(model, argh)
+    expect(json).to be_a(Hash)
+    expect(json).to have_key(:io)
+    expect(json).to have_key(:surfaces)
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
+    expect(TBD.status).to be_zero
+    expect(TBD.logs).to be_empty
+    expect(surfaces).to be_a(Hash)
+    expect(surfaces.size).to eq(65) # ! 56 before skylight/well/leader lines
+    expect(io).to be_a(Hash)
+    expect(io).to have_key(:edges)
+    expect(io[:edges].size).to eq(115) # ! 106 before skylight/well/leader lines
+
+    # Extra 9 edges:
+    #   - 4x new "skylightjamb" edges
+    #   - 4x new "transition" edges around well
+    #   - 1x "transition" edge along leader line, required for well cutout.
+    sky_jambs = io[:edges].select { |ed| ed[:surfaces].include?(sky_id) }
+    expect(sky_jambs.size).to eq(4)
+
+    sky_jambs.each do |edg|
+      expect(edg[:surfaces].size).to eq(2)
+      expect(edg[:surfaces]).to include(well_id)
+      expect(edg[:type]).to eq(:skylightjamb)
+    end
+
+    roof_edges  = io[:edges].select { |ed| ed[:surfaces].include?(roof_id) }
+    parapets    = roof_edges.select { |ed| ed[:type] == :parapetconvex }
+    transitions = roof_edges.select { |ed| ed[:type] == :transition }
+    expect(parapets.size).to eq(5)
+    expect(transitions.size).to eq(10)
+    expect(roof_edges.size).to eq(parapets.size + transitions.size)
+
+    parapets.each { |edg| expect(edg[:surfaces].size).to eq(2) }
+
+    t1x = transitions.select { |edg| edg[:surfaces].size == 1 }
+    t2x = transitions.select { |edg| edg[:surfaces].size == 2 }
+    t4x = transitions.select { |edg| edg[:surfaces].size == 4 }
+    expect(t1x.size).to eq(1) # leader line
+    expect(t2x.size).to eq(5) # see "can process JSON surface KHI entries"
+    expect(t4x.size).to eq(4) # around skylight well
+
+    expect(transitions.size).to eq(t1x.size + t2x.size + t4x.size)
+
+    # Skylight well cutout leader line backtracks onto itself.
+    t1x = t1x.first
+    expect(t1x[:surfaces]).to include(roof_id)
+
+    t4x.each do |edg|
+      expect(edg[:surfaces].size).to eq(4)
+      expect(edg[:surfaces]).to include(roof_id) # roof with cutout
+      expect(edg[:surfaces]).to include(well_id) # new base surface for skylight
+
+      edg[:surfaces].each do |s|
+        next if s == roof_id
+        next if s == well_id
+
+        expect(s).to include("0:0:0:0:")
+        # e.g.:
+        # ... Level 0 Open area 1 Ceiling Plenum RoofCeiling (i.e. roof_id)
+        # ... 0:0:0:Open area 1 (i.e. well_id)
+        # ... 0:0:0:0:3:Level 0 Ceiling Plenum (i.e. well wall, plenum side)
+        # ... 0:0:0:0:3:Open area 1 (i.e. adjacent well wall, open area side)
+      end
+    end
+
+    puts TBD.logs unless TBD.logs.empty?
+    expect(TBD.status).to be_zero
+
+    file = File.join(__dir__, "files/osms/out/seb2_sky2.osm")
+    model.save(file, true)
   end
 
   it "can generate and access KIVA inputs (midrise apts)" do
