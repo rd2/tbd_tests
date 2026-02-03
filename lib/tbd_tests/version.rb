@@ -29,5 +29,5 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 module TBD_Tests
-  VERSION = "0.3.1".freeze
+  VERSION = "0.3.2".freeze
 end
