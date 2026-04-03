@@ -658,7 +658,7 @@ RSpec.describe TBD_Tests do
       next     if surface[:ground     ]
       next unless surface[:conditioned]
 
-      unless surface[:boundary].downcase == "outdoors"
+      unless surface[:boundary] == "outdoors"
         next unless surfaces.key?(surface[:boundary])
         next     if surfaces[surface[:boundary]][:conditioned]
       end
@@ -1426,7 +1426,7 @@ RSpec.describe TBD_Tests do
           next      if holes.key?(i)
           next      if shades.key?(i)
 
-          facing = surfaces[i][:boundary].downcase
+          facing = surfaces[i][:boundary]
           next unless facing == "othersidecoefficients"
 
           s1      = edge[:surfaces][id]
@@ -2377,7 +2377,7 @@ RSpec.describe TBD_Tests do
         expect(surface[:ratio]).to be_within(0.2).of( -1.3) if id == ids[:i] #  -7.3%
         expect(surface[:ratio]).to be_within(0.2).of( -1.5) if id == ids[:j]
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
 
@@ -2452,7 +2452,7 @@ RSpec.describe TBD_Tests do
         expect(surface[:ratio]).to be_within(0.2).of( -0.1) if id == ids[:j] # -1.3%
         # ! office walls: same results ... no parapet/roof
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
 
@@ -2532,7 +2532,7 @@ RSpec.describe TBD_Tests do
         expect(surface[:ratio]).to be_within(0.2).of( -0.1) if id == ids[:j] # Bulk Rear
         # ! office walls: same results ... no parapet/roof
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
 
@@ -2620,7 +2620,7 @@ RSpec.describe TBD_Tests do
         expect(surface[:ratio]).to be_within(0.2).of( -1.5) if id == ids[:j] # Bulk Rear
         # ! office walls: same results ... no parapet/roof
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
   end
@@ -2692,7 +2692,7 @@ RSpec.describe TBD_Tests do
     # Tracking outdoor-facing office walls.
     model.getSurfaces.each do |s|
       next unless s.surfaceType == "Wall"
-      next unless s.outsideBoundaryCondition == "Outdoors"
+      next unless s.outsideBoundaryCondition.downcase == "outdoors"
 
       id  = s.construction.get.nameString
       str = "Typical Insulated Wood Framed Exterior Wall R-11.24"
@@ -2763,6 +2763,7 @@ RSpec.describe TBD_Tests do
       next unless surface[:space].nameString == "Attic"
 
       # Attic is an UNENCLOSED zone - outdoor-facing surfaces are not derated.
+      expect(surface).to have_key(:filmRSI)
       expect(surface).to have_key(:conditioned)
       expect(surface[:conditioned]).to be false
       expect(surface).to_not have_key(:heatloss)
@@ -2772,7 +2773,7 @@ RSpec.describe TBD_Tests do
       # office spaces) share derated constructions (although inverted).
       expect(surface).to have_key(:boundary)
       b = surface[:boundary]
-      next if b.downcase == "outdoors"
+      next if b == "outdoors"
 
       # TBD/Topolys should be tracking the adjacent CONDITIONED surface.
       expect(surfaces).to have_key(b)
@@ -2818,21 +2819,26 @@ RSpec.describe TBD_Tests do
       # Comparing derating ratios of constructions.
       expect(c.layers[1].to_MasslessOpaqueMaterial).to_not be_empty
       m = c.layers[1].to_MasslessOpaqueMaterial.get
+      expect(surface[:filmRSI].round(4)).to eq(0.2665)
 
       # Before derating.
-      initial_R = s.filmResistance
+      #   "5/8 in. Gypsum Board"        : RSi = 0.0994 m2.K/W
+      #   "Typical Insulation R-35.4 1" : RSi = 6.2348 m2.K/W
+      #    surface air film resistances : RSi = 0.2665 m2.K/W
+      #   -----------------------------   -------------------
+      #                                   RSi = 6.6007 m2.K/W
+      initial_R  = surface[:filmRSI]
       initial_R += 0.0994
       initial_R += 6.2348
+      expect(initial_R.round(3)).to eq(6.601)
 
       # After derating.
-      derated_R = s.filmResistance
+      derated_R  = surface[:filmRSI]
       derated_R += 0.0994
       derated_R += m.thermalResistance
 
       ratio = -(initial_R - derated_R) * 100 / initial_R
       expect(ratio).to be_within(1).of(surfaces[b][:ratio])
-      # "5/8 in. Gypsum Board"        : RSi = 0,0994 m2.K/W
-      # "Typical Insulation R-35.4 1" : RSi = 6,2348 m2.K/W
     end
 
     surfaces.each do |id, surface|
@@ -2844,7 +2850,7 @@ RSpec.describe TBD_Tests do
         expect(surface[:heatloss]).to be_within(0.001).of(0)
         expect(surface).to_not have_key(:ratio)
         expect(surface).to have_key(:u)
-        expect(surface[:u]).to be_within(0.001).of(0.153)
+        expect(surface[:u]).to be_within(0.001).of(0.152)
         next
       end
 
@@ -2967,6 +2973,7 @@ RSpec.describe TBD_Tests do
       next unless surface[:space].nameString == "Attic"
 
       # Attic is an UNENCLOSED zone - outdoor-facing surfaces are not derated.
+      expect(surface).to have_key(:filmRSI)
       expect(surface).to have_key(:conditioned)
       expect(surface[:conditioned]).to be false
       expect(surface).to_not have_key(:heatloss)
@@ -2974,7 +2981,7 @@ RSpec.describe TBD_Tests do
 
       expect(surface).to have_key(:boundary)
       b = surface[:boundary]
-      next if b == "Outdoors"
+      next if b == "outdoors"
 
       expect(surfaces).to have_key(b)
       expect(surfaces[b]).to have_key(:conditioned)
@@ -2989,13 +2996,12 @@ RSpec.describe TBD_Tests do
       s = model.getSurfaceByName(id)
       expect(s).to_not be_empty
       s = s.get
-      expect(s.nameString).to eq(id)
       expect(s.surfaceType).to eq("Floor")
       expect(s.isConstructionDefaulted).to be false
       c = s.construction.get.to_LayeredConstruction
       expect(c).to_not be_empty
       c = c.get
-      next unless c.nameString == "Attic_floor_perimeter_south floor"
+      next unless c.nameString.include?("Attic_floor_perimeter_south")
 
       expect(c.nameString).to include("c tbd")
       expect(c.layers.size).to eq(2)
@@ -3003,82 +3009,97 @@ RSpec.describe TBD_Tests do
       expect(c.layers[1].nameString).to include("m tbd")
       expect(c.layers[1].to_MasslessOpaqueMaterial).to_not be_empty
       m = c.layers[1].to_MasslessOpaqueMaterial.get
+      expect(surface[:filmRSI].round(4)).to eq(0.2665)
 
       # Before derating.
-      initial_R  = s.filmResistance
+      #   "5/8 in. Gypsum Board"        : RSi = 0.0994 m2.K/W
+      #   "Typical Insulation R-35.4 1" : RSi = 6.2348 m2.K/W
+      #    surface air film resistances : RSi = 0.2665 m2.K/W
+      #   -----------------------------   -------------------
+      #                                   RSi = 6.6007 m2.K/W
+      initial_R  = surface[:filmRSI]
       initial_R += 0.0994
       initial_R += 6.2348
+      expect(initial_R.round(3)).to eq(6.601)
 
       # After derating.
-      derated_R  = s.filmResistance
+      derated_R  = surface[:filmRSI]
       derated_R += 0.0994
       derated_R += m.thermalResistance
+      expect(derated_R.round(3)).to eq(3.319)
 
       ratio = -(initial_R - derated_R) * 100 / initial_R
+      expect(ratio.round(2)).to eq(-49.72)
       expect(ratio).to be_within(1).of(surfaces[b][:ratio])
-      # "5/8 in. Gypsum Board"        : RSi = 0,0994 m2.K/W
-      # "Typical Insulation R-35.4 1" : RSi = 6,2348 m2.K/W
+    end
 
-      surfaces.each do |id, surface|
-        next unless surface.key?(:edges)
+    surfaces.each do |id, surface|
+      next unless surface.key?(:edges)
 
-        expect(surface).to have_key(:heatloss)
-        expect(surface).to have_key(:ratio)
-        h = surface[:heatloss]
-        s = model.getSurfaceByName(id)
-        expect(s).to_not be_empty
-        s = s.get
-        expect(s.nameString).to eq(id)
-        expect(s.isConstructionDefaulted).to be false
-        expect(s.construction.get.nameString).to include(" tbd")
-        next unless s.surfaceType == "Wall"
+      expect(surface).to have_key(:heatloss)
 
-        # Testing outdoor-facing walls.
-        expect(h).to be_within(TOL).of(51.17) if id.include?("_1_") # South
-        expect(h).to be_within(TOL).of(33.08) if id.include?("_2_") # East
-        expect(h).to be_within(TOL).of(48.32) if id.include?("_3_") # North
-        expect(h).to be_within(TOL).of(33.08) if id.include?("_4_") # West
-
-        c = s.construction
-        expect(c).to_not be_empty
-        c = c.get.to_LayeredConstruction
-        expect(c).to_not be_empty
-        c = c.get
-        expect(c.layers.size).to eq(4)
-        expect(c.layers[2].nameString).to include("m tbd")
-        next unless id.include?("_1_") # South
-
-        l_fen     = 0
-        l_head    = 0
-        l_sill    = 0
-        l_jamb    = 0
-        l_grade   = 0
-        l_parapet = 0
-        l_corner  = 0
-
-        surface[:edges].values.each do |edge|
-          l_fen     += edge[:length] if edge[:type] == :fenestration
-          l_head    += edge[:length] if edge[:type] == :head
-          l_sill    += edge[:length] if edge[:type] == :sill
-          l_jamb    += edge[:length] if edge[:type] == :jamb
-          l_grade   += edge[:length] if edge[:type] == :grade
-          l_grade   += edge[:length] if edge[:type] == :gradeconcave
-          l_grade   += edge[:length] if edge[:type] == :gradeconvex
-          l_parapet += edge[:length] if edge[:type] == :parapet
-          l_parapet += edge[:length] if edge[:type] == :parapetconcave
-          l_parapet += edge[:length] if edge[:type] == :parapetconvex
-          l_corner  += edge[:length] if edge[:type] == :cornerconcave
-          l_corner  += edge[:length] if edge[:type] == :cornerconvex
-        end
-
-        expect(l_fen    ).to be_within(TOL).of( 0.00)
-        expect(l_head   ).to be_within(TOL).of(46.35)
-        expect(l_sill   ).to be_within(TOL).of(46.35)
-        expect(l_jamb   ).to be_within(TOL).of(46.35)
-        expect(l_grade  ).to be_within(TOL).of(27.69)
-        expect(l_parapet).to be_within(TOL).of(27.69)
-        expect(l_corner ).to be_within(TOL).of( 6.10)
+      if id == "Core_ZN_ceiling"
+        expect(surface[:heatloss]).to be_within(0.001).of(0)
+        expect(surface).to_not have_key(:ratio)
+        expect(surface).to have_key(:u)
+        expect(surface[:u]).to be_within(0.001).of(0.152)
+        next
       end
+
+      expect(surface).to have_key(:ratio)
+      h = surface[:heatloss]
+      s = model.getSurfaceByName(id)
+      expect(s).to_not be_empty
+      s = s.get
+      expect(s.nameString).to eq(id)
+      expect(s.isConstructionDefaulted).to be false
+      expect(s.construction.get.nameString).to include(" tbd")
+      next unless s.surfaceType == "Wall"
+
+      expect(h).to be_within(TOL).of(51.17) if id.include?("_1_") # South
+      expect(h).to be_within(TOL).of(33.08) if id.include?("_2_") # East
+      expect(h).to be_within(TOL).of(48.32) if id.include?("_3_") # North
+      expect(h).to be_within(TOL).of(33.08) if id.include?("_4_") # West
+
+      c = s.construction
+      expect(c).to_not be_empty
+      c = c.get.to_LayeredConstruction
+      expect(c).to_not be_empty
+      c = c.get
+      expect(c.layers.size).to eq(4)
+      expect(c.layers[2].nameString).to include("m tbd")
+      next unless id.include?("_1_") # South
+
+      l_fen     = 0
+      l_head    = 0
+      l_sill    = 0
+      l_jamb    = 0
+      l_grade   = 0
+      l_parapet = 0
+      l_corner  = 0
+
+      surface[:edges].values.each do |edge|
+        l_fen     += edge[:length] if edge[:type] == :fenestration
+        l_head    += edge[:length] if edge[:type] == :head
+        l_sill    += edge[:length] if edge[:type] == :sill
+        l_jamb    += edge[:length] if edge[:type] == :jamb
+        l_grade   += edge[:length] if edge[:type] == :grade
+        l_grade   += edge[:length] if edge[:type] == :gradeconcave
+        l_grade   += edge[:length] if edge[:type] == :gradeconvex
+        l_parapet += edge[:length] if edge[:type] == :parapet
+        l_parapet += edge[:length] if edge[:type] == :parapetconcave
+        l_parapet += edge[:length] if edge[:type] == :parapetconvex
+        l_corner  += edge[:length] if edge[:type] == :cornerconcave
+        l_corner  += edge[:length] if edge[:type] == :cornerconvex
+      end
+
+      expect(l_fen    ).to be_within(TOL).of( 0.00)
+      expect(l_head   ).to be_within(TOL).of(12.81)
+      expect(l_sill   ).to be_within(TOL).of(10.98)
+      expect(l_jamb   ).to be_within(TOL).of(22.56)
+      expect(l_grade  ).to be_within(TOL).of(27.69)
+      expect(l_parapet).to be_within(TOL).of(27.69)
+      expect(l_corner ).to be_within(TOL).of( 6.10)
     end
   end
 
@@ -3093,7 +3114,7 @@ RSpec.describe TBD_Tests do
     model = model.get
 
     model.getSurfaces.each do |s|
-      next unless s.outsideBoundaryCondition == "Outdoors"
+      next unless s.outsideBoundaryCondition.downcase == "outdoors"
 
       expect(s.space).to_not be_empty
       expect(s.isConstructionDefaulted).to be true
@@ -3198,7 +3219,7 @@ RSpec.describe TBD_Tests do
         expect(surface[:ratio]).to be_within(0.2).of(-15.6) if id == ids[:c]
         expect(surface[:ratio]).to be_within(0.2).of(- 7.3) if id == ids[:i]
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
   end
@@ -3312,7 +3333,7 @@ RSpec.describe TBD_Tests do
         # puts "#{name} RSi derated by #{ratio}%"
         expect(surface[:ratio]).to be_within(0.2).of(-46.0) if id == ids[:b]
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
 
@@ -3383,7 +3404,7 @@ RSpec.describe TBD_Tests do
         # puts "#{name} RSi derated by #{ratio}%"
         expect(surface[:ratio]).to be_within(0.2).of(-46.0) if id == ids[:b]
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
 
@@ -3511,7 +3532,7 @@ RSpec.describe TBD_Tests do
         # puts "#{name} RSi derated by #{ratio}%"
         expect(surface[:ratio]).to be_within(0.2).of(-41.9) if id == ids[:b]
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
 
@@ -3548,7 +3569,7 @@ RSpec.describe TBD_Tests do
         # puts "#{name} RSi derated by #{ratio}%"
         expect(surface[:ratio]).to be_within(0.2).of(-41.9) if id == ids[:b]
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
 
@@ -3600,7 +3621,7 @@ RSpec.describe TBD_Tests do
     end
 
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
       next unless surface.key?(:ratio)
 
       expect(surface).to have_key(:heatloss)
@@ -3706,7 +3727,7 @@ RSpec.describe TBD_Tests do
 
       expect(surface).to have_key(:story)
       expect(surface).to have_key(:boundary)
-      expect(surface[:boundary]).to eq("Outdoors")
+      expect(surface[:boundary]).to eq("outdoors")
 
       nom = surface[:story].nameString
       expect(stories).to include(nom)
@@ -3807,7 +3828,7 @@ RSpec.describe TBD_Tests do
       id   = c.nameString
       name = s.nameString
 
-      if s.outsideBoundaryCondition == "Outdoors"
+      if s.outsideBoundaryCondition.downcase == "outdoors"
         expect(c.layers.size).to eq(4)
         expect(c.layers[2].to_StandardOpaqueMaterial).to_not be_empty
         m = c.layers[2].to_StandardOpaqueMaterial.get
@@ -4095,11 +4116,13 @@ RSpec.describe TBD_Tests do
         expect(c).to_not be_empty
         c = c.get
         i = 0
-        i = 2 if s.outsideBoundaryCondition == "Outdoors"
+        i = 2 if s.outsideBoundaryCondition.downcase == "outdoors"
         expect(c.layers[i].nameString).to include("m tbd")
       end
 
       surfaces.each do |id, surface|
+        expect(surface).to have_key(:filmRSI)
+
         if surface.key?(:ratio)
           expect(surface[:ratio]).to be_within(0.1).of(-36.74) if id == ids[:a]
           expect(surface[:ratio]).to be_within(0.1).of(-34.61) if id == ids[:b]
@@ -4135,14 +4158,14 @@ RSpec.describe TBD_Tests do
           expect(c.layers[2].to_StandardOpaqueMaterial).to_not be_empty
           m = c.layers[2].to_StandardOpaqueMaterial.get
 
-          initial_R = s.filmResistance + 2.4674
-          derated_R = s.filmResistance + 0.9931
+          initial_R  = surface[:filmRSI] + 2.4674
+          derated_R  = surface[:filmRSI] + 0.9931
           derated_R += m.thickness / m.thermalConductivity
 
           ratio = -(initial_R - derated_R) * 100 / initial_R
           expect(ratio).to be_within(1).of(surfaces[id][:ratio])
         else
-          if surface[:boundary].downcase == "outdoors"
+          if surface[:boundary] == "outdoors"
             expect(surface[:conditioned]).to be false
           end
         end
@@ -4550,7 +4573,7 @@ RSpec.describe TBD_Tests do
         expect(surface[:ratio]).to be_within(0.2).of(-19.02) if id == ids[:k]
         expect(surface[:ratio]).to be_within(0.2).of(-15.09) if id == ids[:l]
       else
-        expect(surface[:boundary].downcase).to_not eq("outdoors")
+        expect(surface[:boundary]).to_not eq("outdoors")
       end
     end
   end
@@ -4738,11 +4761,13 @@ RSpec.describe TBD_Tests do
       expect(c).to_not be_empty
       c = c.get
       i = 0
-      i = 2 if s.outsideBoundaryCondition == "Outdoors"
+      i = 2 if s.outsideBoundaryCondition.downcase == "outdoors"
       expect(c.layers[i].nameString).to include("m tbd")
     end
 
     surfaces.each do |id, surface|
+      expect(surface).to have_key(:filmRSI)
+
       if surface.key?(:ratio)
         expect(surface[:ratio]).to be_within(0.1).of(-28.93) if id == ids[:a]
         expect(surface[:ratio]).to be_within(0.1).of(-26.61) if id == ids[:b]
@@ -4779,14 +4804,14 @@ RSpec.describe TBD_Tests do
         expect(c.layers[2].to_StandardOpaqueMaterial).to_not be_empty
         m = c.layers[2].to_StandardOpaqueMaterial.get
 
-        initial_R = s.filmResistance + 2.4674
-        derated_R = s.filmResistance + 0.9931
+        initial_R  = surface[:filmRSI] + 2.4674
+        derated_R  = surface[:filmRSI] + 0.9931
         derated_R += m.thickness / m.thermalConductivity
 
         ratio = -(initial_R - derated_R) * 100 / initial_R
         expect(ratio).to be_within(1).of(surfaces[id][:ratio])
       else
-        if surface[:boundary].downcase == "outdoors"
+        if surface[:boundary] == "outdoors"
           expect(surface[:conditioned]).to be false
         end
       end
@@ -4899,11 +4924,13 @@ RSpec.describe TBD_Tests do
       expect(c).to_not be_empty
       c = c.get
       i = 0
-      i = 2 if s.outsideBoundaryCondition == "Outdoors"
+      i = 2 if s.outsideBoundaryCondition.downcase == "outdoors"
       expect(c.layers[i].nameString).to include("m tbd")
     end
 
     surfaces.each do |id, surface|
+      expect(surface).to have_key(:filmRSI)
+
       if surface.key?(:ratio)
         expect(surface[:ratio]).to be_within(0.1).of(-28.93) if id == ids[:a]
         expect(surface[:ratio]).to be_within(0.1).of(-26.61) if id == ids[:b]
@@ -4940,14 +4967,14 @@ RSpec.describe TBD_Tests do
         expect(c.layers[2].to_StandardOpaqueMaterial).to_not be_empty
         m = c.layers[2].to_StandardOpaqueMaterial.get
 
-        initial_R = s.filmResistance + 2.4674
-        derated_R = s.filmResistance + 0.9931
+        initial_R  = surface[:filmRSI] + 2.4674
+        derated_R  = surface[:filmRSI] + 0.9931
         derated_R += m.thickness / m.thermalConductivity
 
         ratio = -(initial_R - derated_R) * 100 / initial_R
         expect(ratio).to be_within(1).of(surfaces[id][:ratio])
       else
-        if surface[:boundary].downcase == "outdoors"
+        if surface[:boundary] == "outdoors"
           expect(surface[:conditioned]).to be false
         end
       end
@@ -5060,11 +5087,13 @@ RSpec.describe TBD_Tests do
       expect(c).to_not be_empty
       c = c.get
       i = 0
-      i = 2 if s.outsideBoundaryCondition == "Outdoors"
+      i = 2 if s.outsideBoundaryCondition.downcase == "outdoors"
       expect(c.layers[i].nameString).to include("m tbd")
     end
 
     surfaces.each do |id, surface|
+      expect(surface).to have_key(:filmRSI)
+
       if surface.key?(:ratio)
         # ratio  = format "%3.1f", surface[:ratio]
         # name   = id.rjust(15, " ")
@@ -5104,14 +5133,14 @@ RSpec.describe TBD_Tests do
         expect(c.layers[2].to_StandardOpaqueMaterial).to_not be_empty
         m = c.layers[2].to_StandardOpaqueMaterial.get
 
-        initial_R = s.filmResistance + 2.4674
-        derated_R = s.filmResistance + 0.9931
+        initial_R  = surface[:filmRSI] + 2.4674
+        derated_R  = surface[:filmRSI] + 0.9931
         derated_R += m.thickness / m.thermalConductivity
 
         ratio = -(initial_R - derated_R) * 100 / initial_R
         expect(ratio).to be_within(1).of(surfaces[id][:ratio])
       else
-        if surface[:boundary].downcase == "outdoors"
+        if surface[:boundary] == "outdoors"
           expect(surface[:conditioned]).to be false
         end
       end
@@ -5715,7 +5744,7 @@ RSpec.describe TBD_Tests do
     # entry for "Entryway  Wall 5" : "bad" fenestration perimeters, which
     # only derates the host wall itself
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
 
       expect(surface).to_not have_key(:ratio)           unless id == name
       expect(surface[:heatloss]).to be_within(TOL).of(8.89) if id == name
@@ -5753,7 +5782,7 @@ RSpec.describe TBD_Tests do
 
     # As above, yet the KHI points are now set @0.5 W/K per m (instead of 0)
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
 
       expect(surface).to_not have_key(:ratio) unless id == "Entryway  Wall 5"
       next                                    unless id == "Entryway  Wall 5"
@@ -5809,7 +5838,7 @@ RSpec.describe TBD_Tests do
 
     # As above, with a "good" surface PSI set
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
 
       expect(surface).to_not have_key(:ratio) unless id == "Entryway  Wall 5"
       next                                    unless id == "Entryway  Wall 5"
@@ -5875,7 +5904,7 @@ RSpec.describe TBD_Tests do
     # between :corner to :fenestration (or vice versa) for corner windows.
     surfaces.each do |id, surface|
       walls = ["Entryway  Wall 5", "Entryway  Wall 6", "Entryway  Wall 4"]
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
 
       expect(surface).to have_key(:ratio)         if walls.include?(id)
       expect(surface).to_not have_key(:ratio) unless walls.include?(id)
@@ -5933,7 +5962,7 @@ RSpec.describe TBD_Tests do
     end
 
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
       next unless surface.key?(:ratio)
 
       expect(ids).to have_value(id)
@@ -6337,7 +6366,7 @@ RSpec.describe TBD_Tests do
     end
 
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
       next unless surface.key?(:ratio)
 
       expect(surface).to have_key(:heatloss)
@@ -6450,7 +6479,7 @@ RSpec.describe TBD_Tests do
       expect(surface).to have_key(:edges)
       expect(surface).to have_key(:story)
       expect(surface).to have_key(:boundary)
-      expect(surface[:boundary]).to eq("Outdoors")
+      expect(surface[:boundary]).to eq("outdoors")
       nom = surface[:story].nameString
       expect(stories).to include(nom)
       expect(nom).to eq(stories[0]) if id.include?("g ")
@@ -6649,7 +6678,7 @@ RSpec.describe TBD_Tests do
       expect(c).to_not be_empty
       c = c.get
       i = 0
-      i = 2 if s.outsideBoundaryCondition == "Outdoors"
+      i = 2 if s.outsideBoundaryCondition.downcase == "outdoors"
       expect(c.layers[i].nameString).to include("m tbd")
     end
   end
@@ -6700,7 +6729,7 @@ RSpec.describe TBD_Tests do
         next unless surfaces[id][:space].nameString == "Attic"
 
         expect(surfaces[id][:conditioned]).to be false
-        next if surfaces[id][:boundary] == "Outdoors"
+        next if surfaces[id][:boundary] == "outdoors"
 
         expect(s.adjacentSurface).to_not be_empty
         adjacent = s.adjacentSurface.get.nameString
@@ -6713,7 +6742,7 @@ RSpec.describe TBD_Tests do
     # Check derating of ceilings (below attic).
     surfaces.each do |id, surface|
       next unless surface.key?(:ratio)
-      next     if surface[:boundary].downcase == "outdoors"
+      next     if surface[:boundary] == "outdoors"
 
       expect(surface).to have_key(:heatloss)
       expect(surface[:heatloss].abs).to be > 0
@@ -6724,7 +6753,7 @@ RSpec.describe TBD_Tests do
     # Check derating of outdoor-facing walls.
     surfaces.each do |id, surface|
       next unless surface.key?(:ratio)
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
 
       expect(surface).to have_key(:heatloss)
       expect(surface[:heatloss].abs).to be > 0
@@ -6783,7 +6812,7 @@ RSpec.describe TBD_Tests do
     }.freeze
 
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
       next unless surface.key?(:ratio)
 
       expect(surface).to have_key(:heatloss)
@@ -7122,7 +7151,7 @@ RSpec.describe TBD_Tests do
     t11 = :rimjoist
 
     surfaces.each do |id, surface|
-      next unless surface[:boundary].downcase == "outdoors"
+      next unless surface[:boundary] == "outdoors"
       next unless surface.key?(:ratio)
 
       expect(surface).to have_key(:heatloss)
@@ -9647,7 +9676,7 @@ RSpec.describe TBD_Tests do
 
     surfaces.each do |id, surface|
       next unless surface.key?(:boundary)
-      next unless surface[:boundary] == "Outdoors"
+      next unless surface[:boundary] == "outdoors"
       next unless surface.key?(:type)
       next unless surface[:type] == :wall
       next unless surface.key?(:construction)
@@ -10005,7 +10034,7 @@ RSpec.describe TBD_Tests do
       next unless surface.key?(:heatloss)
       next unless surface.key?(:net)
       next unless surface.key?(:type)
-      next unless surface[:boundary] == "Outdoors"
+      next unless surface[:boundary] == "outdoors"
       next unless surface[:type    ] == :wall
 
       hloss += surface[:heatloss]
@@ -10134,7 +10163,7 @@ RSpec.describe TBD_Tests do
 
     model.getSurfaces.each do |s|
       next unless s.surfaceType == "Wall"
-      next unless s.outsideBoundaryCondition == "Outdoors"
+      next unless s.outsideBoundaryCondition.downcase == "outdoors"
 
       walls << s.nameString
       c = s.construction
@@ -10320,7 +10349,7 @@ RSpec.describe TBD_Tests do
 
     model.getSurfaces.each do |s|
       next unless s.surfaceType == "Wall"
-      next unless s.outsideBoundaryCondition == "Outdoors"
+      next unless s.outsideBoundaryCondition.downcase == "outdoors"
 
       walls << s.nameString
       c = s.construction
@@ -12349,7 +12378,8 @@ RSpec.describe TBD_Tests do
         c = c.get.to_LayeredConstruction
         expect(c).to_not be_empty
         c = c.get
-        expect(TBD.rsi(c, s.filmResistance)).to be_within(TOL).of(6.38)
+        f = TBD.filmResistances(:ceiling, s.tilt)
+        expect(TBD.rsi(c, f)).to be_within(TOL).of(6.44)
 
         construction = c if construction.nil?
         expect(c).to eq(construction)
@@ -12441,7 +12471,7 @@ RSpec.describe TBD_Tests do
 
       surfaces.each do |nom, surface|
         expect(surface).to be_a(Hash)
-
+        expect(surface).to have_key(:filmRSI)
         expect(surface).to have_key(:conditioned)
         expect(surface).to have_key(:deratable)
         expect(surface).to have_key(:construction)
@@ -12471,7 +12501,7 @@ RSpec.describe TBD_Tests do
 
         expect(c.nameString).to include("c tbd") # TBD-derated
         a  += surface[:net]
-        ua += 1 / TBD.rsi(c, s.filmResistance) * surface[:net]
+        ua += 1 / TBD.rsi(c, surface[:filmRSI]) * surface[:net]
       end
 
       expect(ua / a).to be_within(TOL).of(argh[:roof_ut])
@@ -12672,7 +12702,7 @@ RSpec.describe TBD_Tests do
 
       model.getSurfaces.each do |s|
         next unless s.surfaceType == "RoofCeiling"
-        next unless s.outsideBoundaryCondition == "Outdoors"
+        next unless s.outsideBoundaryCondition.downcase == "outdoors"
 
         roofs << s.nameString
         c = s.construction
@@ -12739,6 +12769,7 @@ RSpec.describe TBD_Tests do
 
       surfaces.each do |nom, surface|
         expect(surface).to be_a(Hash)
+        expect(surface).to have_key(:filmRSI)
         expect(surface).to have_key(:conditioned)
         expect(surface).to have_key(:deratable)
         expect(surface).to have_key(:construction)
@@ -12772,7 +12803,7 @@ RSpec.describe TBD_Tests do
         expect(c.nameString).to include("c tbd") # TBD-derated
 
         a  += surface[:net]
-        ua += 1 / TBD.rsi(c, s.filmResistance) * surface[:net]
+        ua += 1 / TBD.rsi(c, surface[:filmRSI]) * surface[:net]
       end
 
       expect(ua / a).to be_within(TOL).of(argh[:roof_ut])
@@ -13203,8 +13234,6 @@ RSpec.describe TBD_Tests do
     TBD.logs.each { |log| expect(log[:message]).to include(msg) }
 
     surfaces.values.each do |s|
-      # puts s.keys
-      # puts
       expect(s).to_not have_key(:kiva)
     end
 
