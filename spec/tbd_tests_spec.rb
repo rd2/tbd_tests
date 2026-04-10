@@ -1876,8 +1876,7 @@ RSpec.describe TBD_Tests do
     model = model.get
 
     argh = { option: "90.1.22|steel.m|default" }
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -2110,8 +2109,7 @@ RSpec.describe TBD_Tests do
     #
     # ... as per 90.1 2022 (non-"parapet" admisible thresholds are much lower).
     argh = { option: "90.1.22|steel.m|default", parapet: false }
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -2228,8 +2226,7 @@ RSpec.describe TBD_Tests do
     model = model.get
 
     argh = {option: "90.1.22|steel.m|default", parapet: false}
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -2316,8 +2313,7 @@ RSpec.describe TBD_Tests do
     model = model.get
 
     argh = {option: "90.1.22|steel.m|default"}
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -2389,8 +2385,7 @@ RSpec.describe TBD_Tests do
     model = model.get
 
     argh = {option: "90.1.22|steel.m|default", parapet: false}
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -5149,7 +5144,7 @@ RSpec.describe TBD_Tests do
 
   it "can process JSON surface KHI entries" do
     translator = OpenStudio::OSVersion::VersionTranslator.new
-    expect(TBD.level).to eq(DBG)
+    expect(TBD.level ).to eq(DBG)
     expect(TBD.clean!).to eq(DBG)
 
     # First, basic IO tests with invalid entries.
