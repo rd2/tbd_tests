@@ -9174,126 +9174,66 @@ RSpec.describe TBD_Tests do
     model = translator.loadModel(path)
     expect(model).to_not be_empty
     model = model.get
-
-    # Mimics measure.
-    walls = {c: {}, dft: "ALL wall constructions" }
-    roofs = {c: {}, dft: "ALL roof constructions" }
-    flors = {c: {}, dft: "ALL floor constructions"}
-
-    walls[:c][walls[:dft]] = {a: 100000000000000}
-    roofs[:c][roofs[:dft]] = {a: 100000000000000}
-    flors[:c][flors[:dft]] = {a: 100000000000000}
-
-    walls[:chx] = OpenStudio::StringVector.new
-    roofs[:chx] = OpenStudio::StringVector.new
-    flors[:chx] = OpenStudio::StringVector.new
+    rf1   = "Typical Insulated Metal Building Roof R-10.31 1"
+    rf2   = "Typical Insulated Metal Building Roof R-18.18"
 
     model.getSurfaces.each do |s|
-      type = s.surfaceType.downcase
-      next unless ["wall", "roofceiling", "floor"].include?(type)
+      next unless s.surfaceType.downcase == "roofceiling"
       next unless s.outsideBoundaryCondition.downcase == "outdoors"
       next     if s.construction.empty?
       next     if s.construction.get.to_LayeredConstruction.empty?
 
-      lc = s.construction.get.to_LayeredConstruction.get
-      id = lc.nameString
-      next if walls[:c].key?(id)
-      next if roofs[:c].key?(id)
-      next if flors[:c].key?(id)
-
-      a = lc.getNetArea
-      # One challenge of the uprate approach concerns OpenStudio-reported
-      # surface film resistances, which factor-in the slope of the surface and
-      # surface emittances. As the uprate approach relies on user-defined Ut
-      # factors (inputs, as targets to meet), it also considers surface film
-      # resistances. In the schematic cross-section below, let's postulate that
-      # each slope has a unique pitch: 50deg (s1), 0deg (s2), & 60dge (s3). All
-      # three surfaces reference the same construction.
-      #
-      #         s2
-      #        _____
-      #       /     \
-      #   s1 /       \ s3
-      #     /         \
-      #
-      # For highly-reflective interior finishes (think of Bruce Lee in Enter
-      # the Dragon), the difference here in reported RSi could reach 0.1 m2.K/W
-      # or R0.6. That's a 1% to 3% difference for a well-insulated construction.
-      # This may seem significant, but the impact on energy simulation results
-      # should be barely noticeable. However, these discrepancies could become
-      # an irritant when processing an OpenStudio model for code compliance
-      # purposes. For clear-field (Uo) calculations, a simple solution is ensure
-      # that the (common) layered construction meets minimal code requirements
-      # for the surface with the lowest film resistance, here s2. Thus surfaces
-      # s1 & s3 will slightly overshoot the Uo target.
-      #
-      # For Ut calculations (which factor-in major thermal bridging), this is
-      # not as straightforward as adjusting the construction layers by hand. Yet
-      # conceptually, the approach here remains similar: for a selected
-      # construction shared by more than one surface, the considered film
-      # resistance will be that of the worst case encountered. The resulting Uo
-      # for that uprated construction might be slightly lower (i.e., better
-      # performing) than expected in some circumstances.
-      f = s.filmResistance
-
-      case type
-      when "wall"
-        walls[:c][id]     = {a: a, lc: lc}
-        walls[:c][id][:f] = f unless walls[:c][id].key?(:f)
-        walls[:c][id][:f] = f     if walls[:c][id][:f] > f
-      when "roofceiling"
-        roofs[:c][id]     = {a: a, lc: lc}
-        roofs[:c][id][:f] = f unless roofs[:c][id].key?(:f)
-        roofs[:c][id][:f] = f     if roofs[:c][id][:f] > f
-      else
-        flors[:c][id]     = {a: a, lc: lc}
-        flors[:c][id][:f] = f unless flors[:c][id].key?(:f)
-        flors[:c][id][:f] = f     if flors[:c][id][:f] > f
-      end
+      lc  = s.construction.get.to_LayeredConstruction.get
+      id  = lc.nameString
+      flm = s.filmResistance
+      expect([rf1, rf2]).to include(id)
+      expect(flm.round(4)).to eq(0.1360)
+      expect(TBD.rsi(lc, flm).round(3)).to eq(1.814) if id == rf1 # R10
+      expect(TBD.rsi(lc, flm).round(3)).to eq(3.201) if id == rf2 # R18
     end
 
-    walls[:c] = walls[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-    roofs[:c] = roofs[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-    flors[:c] = flors[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
+    # One challenge of the uprating approach concerns OpenStudio-reported
+    # surface film resistances, which factor-in the slope of the surface and
+    # surface emittances. As the uprate approach relies on user-defined Ut
+    # factors (inputs, as targets to meet), it also considers surface film
+    # resistances. In the schematic cross-section below, let's postulate that
+    # each slope has a unique pitch: 50deg (s1), 0deg (s2), & 60dge (s3). All
+    # three surfaces reference the same construction.
+    #
+    #         s2
+    #        _____
+    #       /     \
+    #   s1 /       \ s3
+    #     /         \
+    #
+    # For highly-reflective interior finishes (think of Bruce Lee in Enter the
+    # Dragon), the difference here in reported RSi could reach 0.1 m2.K/W or
+    # R0.6. That's a 1% to 3% difference for a well-insulated construction. This
+    # may seem significant at first, but the impact on energy simulation results
+    # should barely be noticeable for well-insulated constructions. Yet such
+    # discrepancies can become an irritant when processing an OpenStudio model
+    # for code compliance purposes. This is more challenging when some envelope
+    # surfaces are INTERZONE (e.g. insulated attic floor).
+    #
+    # When uprating clear-field (Uo) calculations, prior TBD versions ensured
+    # that the shared layered construction met the minimal code requirements
+    # for the surface with the lowest surface air film resistance, here s2.
+    # Surfaces s1 & s3 would slightly overshoot the uprated Uo target.
+    #
+    # The v3.6 fix now averages out surface air film resistances, as follows:
+    #
+    #   area-weighted filmRSI = 1 / ( ∑ ( 1/filmRSIi • AREAi ) / AREAt )
+    #
+    # Relying on an area-weighted average of surface air film resistances, some
+    # surface will report final (derated) Ut values slightly below target,
+    # others slightly above. Yet the area-weighted average (UA-based) should
+    # match the code-required Ut requirement.
+    #
+    # The other v3.6 change is maintaining user-assigned constructions (i.e.
+    # not replacing them with a single, predominant roof or wall construction).
+    # Each construction is certainly uprated, then derated. Yet the original
+    # user-defined, non-insulating layers are maintained as is.
 
-    walls[:c][walls[:dft]][:a] = 0
-    roofs[:c][roofs[:dft]][:a] = 0
-    flors[:c][flors[:dft]][:a] = 0
-
-    walls[:c].keys.each { |id| walls[:chx] << id }
-    roofs[:c].keys.each { |id| roofs[:chx] << id }
-    flors[:c].keys.each { |id| flors[:chx] << id }
-
-    expect(roofs[:c].size).to eq(3)
-    rf1 = "Typical Insulated Metal Building Roof R-10.31 1"
-    rf2 = "Typical Insulated Metal Building Roof R-18.18"
-    expect(roofs[:c].keys[0]).to eq("ALL roof constructions")
-    expect(roofs[:c]["ALL roof constructions"][:a]).to be_within(TOL).of(0)
-    roof1 = roofs[:c].values[1]
-    roof2 = roofs[:c].values[2]
-    expect(roof1[:a] > roof2[:a]).to be true
-    expect(roof1[:f]).to be_within(TOL).of(roof2[:f])
-    expect(roof1[:f]).to be_within(TOL).of(0.1360)
-    expect(1/TBD.rsi(roof1[:lc], roof1[:f])).to be_within(TOL).of(0.5512) # R10
-    expect(1/TBD.rsi(roof2[:lc], roof2[:f])).to be_within(TOL).of(0.3124) # R18
-
-    # Deeper dive into rf1 (more prevalent).
-    targeted = model.getConstructionByName(rf1)
-    expect(targeted).to_not be_empty
-    targeted = targeted.get
-    expect(targeted.to_LayeredConstruction).to_not be_empty
-    targeted = targeted.to_LayeredConstruction.get
-    expect(targeted.is_a?(OpenStudio::Model::LayeredConstruction)).to be true
-    expect(targeted.layers.size).to eq(2)
-
-    targeted.layers.each do |layer|
-      next unless layer.nameString == "Typical Insulation R-9.53 1"
-      expect(layer.to_MasslessOpaqueMaterial).to_not be_empty
-      layer = layer.to_MasslessOpaqueMaterial.get
-      expect(layer.thermalResistance).to be_within(TOL).of(1.68) # m2.K/W (R9.5)
-    end
-
-    # argh[:roof_option ] = "Typical Insulated Metal Building Roof R-10.31 1"
     argh                = {}
     argh[:roof_option ] = "ALL roof constructions"
     argh[:option      ] = "poor (BETBG)"
@@ -9351,8 +9291,15 @@ RSpec.describe TBD_Tests do
     fine_insulation   = fine_insulation.get
     bulk_insulation_r = bulk_insulation.thermalResistance
     fine_insulation_r = fine_insulation.thermalResistance
-    expect(bulk_insulation_r).to be_within(TOL).of(7.307) # once derated
-    expect(fine_insulation_r).to be_within(TOL).of(6.695) # once derated
+    expect(bulk_insulation_r.round(3)).to eq(7.110) # once derated
+    expect(fine_insulation_r.round(3)).to eq(7.110) # once derated
+
+    # Both constructions are uprated, then derated to meet the same NECB target.
+    rsi_bulk = TBD.rsi(bulk_construction, bulk_roof.filmResistance)
+    rsi_fine = TBD.rsi(fine_construction, fine_roof.filmResistance)
+    usi_fine = 1 / rsi_fine
+    expect(rsi_bulk.round(3)).to eq(rsi_fine.round(3))
+    expect(usi_fine.round(3)).to eq(argh[:roof_ut])
 
     # TBD objects.
     expect(surfaces).to have_key(bulk)
@@ -9362,24 +9309,26 @@ RSpec.describe TBD_Tests do
     expect(surfaces[bulk]).to have_key(:net)
     expect(surfaces[fine]).to have_key(:net)
 
-    expect(surfaces[bulk][:heatloss]).to be_within(TOL).of(161.02)
-    expect(surfaces[fine][:heatloss]).to be_within(TOL).of( 87.16)
-    expect(surfaces[bulk][:net     ]).to be_within(TOL).of(3157.28)
-    expect(surfaces[fine][:net     ]).to be_within(TOL).of(1372.60)
+    expect(surfaces[bulk][:heatloss].round(2)).to eq(161.02)
+    expect(surfaces[fine][:heatloss].round(2)).to eq( 87.16)
+    expect(surfaces[bulk][:net     ].round(2)).to eq(3157.28)
+    expect(surfaces[fine][:net     ].round(2)).to eq(1372.60)
 
     heatloss = surfaces[bulk][:heatloss] + surfaces[fine][:heatloss]
     area     = surfaces[bulk][:net     ] + surfaces[fine][:net     ]
 
-    expect(heatloss).to be_within(TOL).of( 248.19)
-    expect(area    ).to be_within(TOL).of(4529.88)
+    expect(heatloss.round(2)).to eq( 248.19)
+    expect(    area.round(2)).to eq(4529.88)
 
+    # The TBD data model tracks the initially-uprated constructions.
     expect(surfaces[bulk]).to have_key(:construction) # not yet derated
     expect(surfaces[fine]).to have_key(:construction)
 
     expect(surfaces[bulk][:construction].nameString).to eq(rf1)
-    expect(surfaces[fine][:construction].nameString).to eq(rf1) # no longer rf2
+    expect(surfaces[fine][:construction].nameString).to eq(rf2)
 
-    uprated = model.getConstructionByName(rf1) # not yet derated
+    # The initially-uprated roof construction is maintained in the model.
+    uprated = model.getConstructionByName(rf1)
     expect(uprated).to_not be_empty
     uprated = uprated.get
     expect(uprated.to_LayeredConstruction).to_not be_empty
@@ -9387,53 +9336,14 @@ RSpec.describe TBD_Tests do
 
     expect(uprated.is_a?(OpenStudio::Model::LayeredConstruction)).to be true
     expect(uprated.layers.size).to eq(2)
-    uprated_layer_r = 0
 
     uprated.layers.each do |layer|
       next unless layer.nameString.include?(" uprated")
 
       expect(layer.to_MasslessOpaqueMaterial).to_not be_empty
-      layer           = layer.to_MasslessOpaqueMaterial.get
-      uprated_layer_r = layer.thermalResistance
-      expect(layer.thermalResistance).to be_within(TOL).of(11.65) # m2.K/W (R66)
+      layer = layer.to_MasslessOpaqueMaterial.get
+      expect(layer.thermalResistance.round(2)).to eq(11.16) # m2.K/W (R63)
     end
-
-    rt = TBD.rsi(uprated, roof1[:f])
-    expect(1/rt).to be_within(TOL).of(0.0849) # R67 (with surface films)
-
-    # Bulk storage roof demonstration.
-    u = surfaces[bulk][:heatloss] / surfaces[bulk][:net]
-    expect(u).to be_within(TOL).of(0.051) # W/m2.K
-
-    de_u   = 1 / uprated_layer_r + u
-    de_r   = 1 / de_u
-    bulk_r = de_r + roof1[:f]
-    bulk_u = 1 / bulk_r
-    expect(de_u).to be_within(TOL).of(0.137) # bit below required Ut of 0.138
-    expect(de_r).to be_within(TOL).of(bulk_insulation_r) # 7.307, not 11.65
-    ratio  = -(uprated_layer_r - de_r) * 100 / (uprated_layer_r + roof1[:f])
-    expect(ratio).to be_within(TOL).of(-36.84)
-    expect(surfaces[bulk]).to have_key(:ratio)
-    expect(surfaces[bulk][:ratio]).to be_within(TOL).of(ratio)
-
-    # Fine storage roof demonstration.
-    u = surfaces[fine][:heatloss] / surfaces[fine][:net]
-    expect(u).to be_within(TOL).of(0.063) # W/m2.K
-
-    de_u   = 1 / uprated_layer_r + u
-    de_r   = 1 / de_u
-    fine_r = de_r + roof1[:f]
-    fine_u = 1 / fine_r
-    expect(de_u).to be_within(TOL).of(0.149) # above required Ut of 0.138
-    expect(de_r).to be_within(TOL).of(fine_insulation_r) # 6.695, not 11.65
-    ratio  = -(uprated_layer_r - de_r) * 100 / (uprated_layer_r + roof1[:f])
-    expect(ratio).to be_within(TOL).of(-42.03)
-    expect(surfaces[fine]).to have_key(:ratio)
-    expect(surfaces[fine][:ratio]).to be_within(TOL).of(ratio)
-
-    ua    = bulk_u * surfaces[bulk][:net] + fine_u * surfaces[fine][:net]
-    ave_u = ua / area
-    expect(ave_u).to be_within(TOL).of(argh[:roof_ut]) # area-weighted average
 
     file = File.join(__dir__, "files/osms/out/up_warehouse.osm")
     model.save(file, true)
@@ -9449,90 +9359,25 @@ RSpec.describe TBD_Tests do
     expect(model).to_not be_empty
     model = model.get
 
-    # Mimics measure.
-    walls = {c: {}, dft: "ALL wall constructions" }
-    roofs = {c: {}, dft: "ALL roof constructions" }
-    flors = {c: {}, dft: "ALL floor constructions"}
-
-    walls[:c][walls[:dft]] = {a: 100000000000000}
-    roofs[:c][roofs[:dft]] = {a: 100000000000000}
-    flors[:c][flors[:dft]] = {a: 100000000000000}
-
-    walls[:chx] = OpenStudio::StringVector.new
-    roofs[:chx] = OpenStudio::StringVector.new
-    flors[:chx] = OpenStudio::StringVector.new
-
-    model.getSurfaces.each do |s|
-      type = s.surfaceType.downcase
-      next unless ["wall", "roofceiling", "floor"].include?(type)
-      next unless s.outsideBoundaryCondition.downcase == "outdoors"
-      next     if s.construction.empty?
-      next     if s.construction.get.to_LayeredConstruction.empty?
-
-      lc = s.construction.get.to_LayeredConstruction.get
-      id = lc.nameString
-      next if walls[:c].key?(id)
-      next if roofs[:c].key?(id)
-      next if flors[:c].key?(id)
-
-      a = lc.getNetArea
-      f = s.filmResistance
-
-      case type
-      when "wall"
-        walls[:c][id]     = {a: a, lc: lc}
-        walls[:c][id][:f] = f unless walls[:c][id].key?(:f)
-        walls[:c][id][:f] = f     if walls[:c][id][:f] > f
-      when "roofceiling"
-        roofs[:c][id]     = {a: a, lc: lc}
-        roofs[:c][id][:f] = f unless roofs[:c][id].key?(:f)
-        roofs[:c][id][:f] = f     if roofs[:c][id][:f] > f
-      else
-        flors[:c][id]     = {a: a, lc: lc}
-        flors[:c][id][:f] = f unless flors[:c][id].key?(:f)
-        flors[:c][id][:f] = f     if flors[:c][id][:f] > f
-      end
-    end
-
-    walls[:c] = walls[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-    roofs[:c] = roofs[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-    flors[:c] = flors[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-
-    walls[:c][walls[:dft]][:a] = 0
-    roofs[:c][roofs[:dft]][:a] = 0
-    flors[:c][flors[:dft]][:a] = 0
-
-    walls[:c].keys.each { |id| walls[:chx] << id }
-    roofs[:c].keys.each { |id| roofs[:chx] << id }
-    flors[:c].keys.each { |id| flors[:chx] << id }
-
-    expect(walls[:c].size).to eq(4)
-
     w1 = "Typical Insulated Metal Building Wall R-8.85 1"
     w2 = "Typical Insulated Metal Building Wall R-11.9"
     w3 = "Typical Insulated Metal Building Wall R-11.9 1"
 
-    expect(walls[:c]).to have_key(w1)
-    expect(walls[:c]).to have_key(w2)
-    expect(walls[:c]).to have_key(w3)
+    model.getSurfaces.each do |s|
+      next unless s.surfaceType.downcase == "wall"
+      next unless s.outsideBoundaryCondition.downcase == "outdoors"
+      next     if s.construction.empty?
+      next     if s.construction.get.to_LayeredConstruction.empty?
 
-    expect(walls[:c].keys[0]).to eq("ALL wall constructions")
-    expect(walls[:c]["ALL wall constructions"][:a]).to be_within(TOL).of(0)
-
-    wall1 = walls[:c][w1]
-    wall2 = walls[:c][w2]
-    wall3 = walls[:c][w3]
-
-    expect(wall1[:a] > wall2[:a]).to be true
-    expect(wall2[:a] > wall3[:a]).to be true
-
-    expect(wall1[:f]).to be_within(TOL).of(wall2[:f])
-    expect(wall3[:f]).to be_within(TOL).of(wall3[:f])
-    expect(wall1[:f]).to be_within(TOL).of(0.150)
-    expect(wall2[:f]).to be_within(TOL).of(0.150)
-    expect(wall3[:f]).to be_within(TOL).of(0.150)
-    expect(1/TBD.rsi(wall1[:lc], wall1[:f])).to be_within(TOL).of(0.642) # R08.8
-    expect(1/TBD.rsi(wall2[:lc], wall2[:f])).to be_within(TOL).of(0.477) # R11.9
+      lc  = s.construction.get.to_LayeredConstruction.get
+      id  = lc.nameString
+      flm = s.filmResistance
+      expect([w1, w2, w3]).to include(id)
+      expect(flm.round(4)).to eq(0.1496)
+      expect(TBD.rsi(lc, flm).round(3)).to eq(1.558) if id == w1 # R08.8
+      expect(TBD.rsi(lc, flm).round(3)).to eq(2.096) if id == w2 # R11.9
+      expect(TBD.rsi(lc, flm).round(3)).to eq(2.096) if id == w3 # R11.9
+    end
 
     # Deeper dive into w1 (more prevalent).
     targeted = model.getConstructionByName(w1)
@@ -9552,10 +9397,9 @@ RSpec.describe TBD_Tests do
 
     # Set w1 (a wall construction) as the 'Bulk Storage Roof' construction. This
     # triggers a TBD warning when uprating: a safeguard limiting uprated
-    # constructions to single surface type (e.g. can't be referenced by both
+    # constructions to single surface types (e.g. can't be referenced by both
     # roof AND wall surfaces).
-    bulk = "Bulk Storage Roof"
-
+    bulk      = "Bulk Storage Roof"
     bulk_roof = model.getSurfaceByName(bulk)
     expect(bulk_roof).to_not be_empty
     bulk_roof = bulk_roof.get
@@ -9574,7 +9418,7 @@ RSpec.describe TBD_Tests do
     argh[:wall_option ] = "ALL wall constructions"
     argh[:option      ] = "poor (BETBG)"
     argh[:uprate_walls] = true
-    argh[:wall_ut     ] = 0.210 # (R27)
+    argh[:wall_ut     ] = 0.210 # (R27), NECB 2017
 
     json     = TBD.process(model, argh)
     expect(json).to be_a(Hash)
@@ -9582,16 +9426,23 @@ RSpec.describe TBD_Tests do
     expect(json).to have_key(:surfaces)
     io       = json[:io      ]
     surfaces = json[:surfaces]
+
+    # PSI-factors of the "poor (BETBG)" set are too conductive. The total heat
+    # loss (W/K) from thermal bridging is too great for insulation materials to
+    # absorb (given TBD/OSut admissible ranges). TBD fails to completely uprate
+    # walls to meet NECB 2017 Ut requirements. In such cases, TBD logs the
+    # failure, yet partially uprates non-compliant wall constructions by setting
+    # the uprated Uo to UMIN.
     expect(TBD.warn?).to be true
-    expect(TBD.logs.size).to eq(1)
+    expect(TBD.logs.size).to eq(3)
+    expect(TBD.logs[0][:message]).to include("Cloning 'Bulk Storage Roof' ")
+    expect(TBD.logs[1][:message]).to include("Negative ")
+    expect(TBD.logs[2][:message]).to include("Unable to completely uprate ")
     expect(surfaces).to be_a(Hash)
     expect(surfaces.size).to eq(23)
     expect(io).to be_a(Hash)
     expect(io).to have_key(:edges)
     expect(io[:edges].size).to eq(300)
-
-    msg = "Cloning '#{bulk}' construction - not '#{w1}' (TBD::uprate)"
-    expect(TBD.logs.first[:message]).to eq(msg)
 
     bulk_roof = model.getSurfaceByName(bulk)
     expect(bulk_roof).to_not be_empty
@@ -9608,34 +9459,30 @@ RSpec.describe TBD_Tests do
     layer0 = bulk_construction.layers[0]
     layer1 = bulk_construction.layers[1]
     layer2 = bulk_construction.layers[2]
-    expect(layer1.nameString).to eq("#{bulk} m tbd")# not uprated
+    expect(layer1.nameString).to eq("#{bulk} m tbd") # not uprated
 
-    layer  = layer0.to_StandardOpaqueMaterial
-    expect(layer).to_not be_empty
-    siding = layer.get.thickness / layer.get.thermalConductivity
-    layer  = layer2.to_StandardOpaqueMaterial
-    expect(layer).to_not be_empty
-    gypsum = layer.get.thickness / layer.get.thermalConductivity
-    extra  = siding + gypsum + wall1[:f]
-
-    wall_surfaces = []
+    uA = 0
+    m2 = 0
 
     model.getSurfaces.each do |s|
       next unless s.surfaceType.downcase == "wall"
       next unless s.outsideBoundaryCondition.downcase == "outdoors"
-      next     if s.construction.empty?
-      next     if s.construction.get.to_LayeredConstruction.empty?
 
+      expect(s.construction).to_not be_empty
+      expect(s.construction.get.to_LayeredConstruction).to_not be_empty
       c = s.construction.get.to_LayeredConstruction.get
       expect(c.numLayers).to eq(3)
       expect(c.layers[0]).to eq(layer0) # same as Bulk Storage Roof
       expect(c.layers[1].nameString).to include(" uprated ")
       expect(c.layers[1].nameString).to include(" m tbd")
       expect(c.layers[2]).to eq(layer2) # same as Bulk Storage Roof
-      wall_surfaces << s
+
+      m2 += s.netArea
+      uA += s.netArea / TBD.rsi(c, s.filmResistance)
     end
 
-    expect(wall_surfaces.size).to eq(10)
+    ut = uA / m2
+    expect(ut.round(3)).to eq(0.226) # R21, below the required R27
 
     # TBD objects.
     expect(surfaces).to have_key(bulk)
@@ -9651,139 +9498,6 @@ RSpec.describe TBD_Tests do
     nom = surfaces[bulk][:construction].nameString
     expect(nom).to include("cloned")
 
-    uprated = model.getConstructionByName(w1) # uprated, not yet derated
-    expect(uprated).to_not be_empty
-    uprated = uprated.get
-    expect(uprated.to_LayeredConstruction).to_not be_empty
-    uprated = uprated.to_LayeredConstruction.get
-    expect(uprated.layers.size).to eq(3)
-    uprated_layer_r = 0
-
-    uprated.layers.each do |layer|
-      next unless layer.nameString.include?("uprated")
-
-      expect(layer.to_MasslessOpaqueMaterial).to_not be_empty
-      uprated_layer_r = layer.to_MasslessOpaqueMaterial.get.thermalResistance
-      expect(uprated_layer_r).to be_within(TOL).of(51.92) # m2.K/W
-    end
-
-    rt = TBD.rsi(uprated, wall1[:f])
-    expect(1/rt).to be_within(TOL).of(0.019) # 52.63 (with surface films)
-
-    # Loop through all walls, fetch nets areas & heatlosses from psi's.
-    net   = 0
-    hloss = 0
-
-    surfaces.each do |id, surface|
-      next unless surface.key?(:boundary)
-      next unless surface[:boundary] == "outdoors"
-      next unless surface.key?(:type)
-      next unless surface[:type] == :wall
-      next unless surface.key?(:construction)
-      next unless surface.key?(:heatloss)
-      next unless surface.key?(:net)
-
-      hloss += surface[:heatloss]
-      net   += surface[:net     ]
-    end
-
-    expect(hloss).to be_within(TOL).of(485.59)
-    expect(net  ).to be_within(TOL).of(2411.7)
-    u     = hloss / net
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(4.76)           # R27 (NECB2017)
-    expect(new_u).to be_within(TOL).of(argh[:wall_ut]) # 0.210 W/m2.K
-
-    # Bulk storage wall demonstration.
-    wll1 = "Bulk Storage Left Wall"
-    wll2 = "Bulk Storage Rear Wall"
-    wll3 = "Bulk Storage Right Wall"
-    rs   = {}
-
-    [wll1, wll2, wll3].each do |i|
-      sface = model.getSurfaceByName(i)
-      expect(sface).to_not be_empty
-      sface = sface.get
-
-      c = sface.construction
-      expect(c).to_not be_empty
-      c = c.get.to_LayeredConstruction
-      expect(c).to_not be_empty
-      c = c.get
-
-      expect(c.numLayers).to eq(3)
-      layer = c.layers[0].to_StandardOpaqueMaterial
-      expect(layer).to_not be_empty
-
-      d = layer.get.thickness
-      k = layer.get.thermalConductivity
-      expect(d / k).to be_within(TOL).of(siding)
-
-      layer = c.layers[1].to_MasslessOpaqueMaterial
-      expect(layer).to_not be_empty
-      rsi   = layer.get.thermalResistance
-
-      expect(rsi).to be_within(TOL).of(4.1493) if i == wll1
-      expect(rsi).to be_within(TOL).of(5.4252) if i == wll2
-      expect(rsi).to be_within(TOL).of(5.3642) if i == wll3
-
-      layer = c.layers[2].to_StandardOpaqueMaterial
-      expect(layer).to_not be_empty
-      d = layer.get.thickness
-      k = layer.get.thermalConductivity
-      expect(d / k).to be_within(TOL).of(gypsum)
-
-      u = c.thermalConductance
-      expect(u).to_not be_empty
-      rs[i] = 1 / u.get
-    end
-
-    expect(rs).to have_key(wll1)
-    expect(rs).to have_key(wll2)
-    expect(rs).to have_key(wll3)
-    expect(rs[wll1]).to be_within(TOL).of(4.2287)
-    expect(rs[wll2]).to be_within(TOL).of(5.5046)
-    expect(rs[wll3]).to be_within(TOL).of(5.4436)
-
-    u     = surfaces[wll1][:heatloss] / surfaces[wll1][:net]
-    expect(u).to be_within(TOL).of(0.2217) # W/m2.K from thermal bridging
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(4.3782) # R24.9 ... lot of doors
-    ratio = -(uprated_layer_r - de_r) * 100 / rt
-    expect(ratio).to be_within(TOL).of(-91.60)
-    expect(surfaces[wll1]).to have_key(:ratio)
-    expect(surfaces[wll1][:ratio]).to be_within(TOL).of(ratio)
-
-    u     = surfaces[wll2][:heatloss] / surfaces[wll2][:net]
-    expect(u).to be_within(TOL).of(0.1652) # W/m2.K from thermal bridging
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(5.6542) # R32.1 ... no openings
-    ratio = -(uprated_layer_r - de_r) * 100 / rt
-    expect(ratio).to be_within(TOL).of(-89.16)
-    expect(surfaces[wll2]).to have_key(:ratio)
-    expect(surfaces[wll2][:ratio]).to be_within(TOL).of(ratio)
-
-    u     = surfaces[wll3][:heatloss] / surfaces[wll3][:net]
-    expect(u).to be_within(TOL).of(0.1671) # W/m2.K from thermal bridging
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(5.5931) # R31.8 ... a few doors
-    ratio = -(uprated_layer_r - de_r) * 100 / rt
-    expect(ratio).to be_within(TOL).of(-89.27)
-    expect(surfaces[wll3]).to have_key(:ratio)
-    expect(surfaces[wll3][:ratio]).to be_within(TOL).of(ratio)
-
     file = File.join(__dir__, "files/osms/out/up2_warehouse.osm")
     model.save(file, true)
   end
@@ -9798,91 +9512,9 @@ RSpec.describe TBD_Tests do
     expect(model).to_not be_empty
     model = model.get
 
-    # Mimics measure.
-    walls = { c: {}, dft: "ALL wall constructions" }
-    roofs = { c: {}, dft: "ALL roof constructions" }
-    flors = { c: {}, dft: "ALL floor constructions"}
-
-    walls[:c][walls[:dft]] = {a: 100000000000000}
-    roofs[:c][roofs[:dft]] = {a: 100000000000000}
-    flors[:c][flors[:dft]] = {a: 100000000000000}
-
-    walls[:chx] = OpenStudio::StringVector.new
-    roofs[:chx] = OpenStudio::StringVector.new
-    flors[:chx] = OpenStudio::StringVector.new
-
-    model.getSurfaces.each do |s|
-      type = s.surfaceType.downcase
-      next unless ["wall", "roofceiling", "floor"].include?(type)
-      next unless s.outsideBoundaryCondition.downcase == "outdoors"
-      next     if s.construction.empty?
-      next     if s.construction.get.to_LayeredConstruction.empty?
-
-      lc = s.construction.get.to_LayeredConstruction.get
-      id = lc.nameString
-      next if walls[:c].key?(id)
-      next if roofs[:c].key?(id)
-      next if flors[:c].key?(id)
-
-      a = lc.getNetArea
-      f = s.filmResistance
-
-      case type
-      when "wall"
-        walls[:c][id]     = {a: a, lc: lc}
-        walls[:c][id][:f] = f unless walls[:c][id].key?(:f)
-        walls[:c][id][:f] = f     if walls[:c][id][:f] > f
-      when "roofceiling"
-        roofs[:c][id]     = {a: a, lc: lc}
-        roofs[:c][id][:f] = f unless roofs[:c][id].key?(:f)
-        roofs[:c][id][:f] = f     if roofs[:c][id][:f] > f
-      else
-        flors[:c][id]     = {a: a, lc: lc}
-        flors[:c][id][:f] = f unless flors[:c][id].key?(:f)
-        flors[:c][id][:f] = f     if flors[:c][id][:f] > f
-      end
-    end
-
-    walls[:c] = walls[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-    roofs[:c] = roofs[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-    flors[:c] = flors[:c].sort_by{ |k,v| v[:a] }.reverse!.to_h
-
-    walls[:c][walls[:dft]][:a] = 0
-    roofs[:c][roofs[:dft]][:a] = 0
-    flors[:c][flors[:dft]][:a] = 0
-
-    walls[:c].keys.each { |id| walls[:chx] << id }
-    roofs[:c].keys.each { |id| roofs[:chx] << id }
-    flors[:c].keys.each { |id| flors[:chx] << id }
-
-    expect(walls[:c].size).to eq(4)
-
     w1 = "Typical Insulated Metal Building Wall R-8.85 1"
     w2 = "Typical Insulated Metal Building Wall R-11.9"
     w3 = "Typical Insulated Metal Building Wall R-11.9 1"
-
-    expect(walls[:c]).to have_key(w1)
-    expect(walls[:c]).to have_key(w2)
-    expect(walls[:c]).to have_key(w3)
-
-    expect(walls[:c].keys[0]).to eq("ALL wall constructions")
-    expect(walls[:c]["ALL wall constructions"][:a]).to be_within(TOL).of(0)
-
-    wall1 = walls[:c][w1]
-    wall2 = walls[:c][w2]
-    wall3 = walls[:c][w3]
-
-    expect(wall1[:a] > wall2[:a]).to be true
-    expect(wall2[:a] > wall3[:a]).to be true
-
-    expect(wall1[:f]).to be_within(TOL).of(wall2[:f])
-    expect(wall3[:f]).to be_within(TOL).of(wall3[:f])
-    expect(wall1[:f]).to be_within(TOL).of(0.150)
-    expect(wall2[:f]).to be_within(TOL).of(0.150)
-    expect(wall3[:f]).to be_within(TOL).of(0.150)
-
-    expect(1/TBD.rsi(wall1[:lc], wall1[:f])).to be_within(TOL).of(0.642) # R08.8
-    expect(1/TBD.rsi(wall2[:lc], wall2[:f])).to be_within(TOL).of(0.477) # R11.9
 
     # Deeper dive into w1 (more prevalent).
     targeted = model.getConstructionByName(w1)
@@ -9890,13 +9522,11 @@ RSpec.describe TBD_Tests do
     targeted = targeted.get
     expect(targeted.to_LayeredConstruction).to_not be_empty
     targeted = targeted.to_LayeredConstruction.get
-
     expect(targeted.is_a?(OpenStudio::Model::LayeredConstruction)).to be true
     expect(targeted.layers.size).to eq(3)
 
     targeted.layers.each do |layer|
       next unless layer.nameString == "Typical Insulation R-7.55 1"
-
       expect(layer.to_MasslessOpaqueMaterial).to_not be_empty
       layer = layer.to_MasslessOpaqueMaterial.get
       expect(layer.thermalResistance).to be_within(TOL).of(1.33) # m2.K/W (R7.6)
@@ -9933,6 +9563,7 @@ RSpec.describe TBD_Tests do
     expect(json).to have_key(:surfaces)
     io       = json[:io      ]
     surfaces = json[:surfaces]
+
     expect(TBD.warn?).to be true
     expect(TBD.logs.size).to eq(1)
     expect(surfaces).to be_a(Hash)
@@ -9961,186 +9592,38 @@ RSpec.describe TBD_Tests do
     layer2 = bulk_construction.layers[2]
     expect(layer1.nameString).to eq("#{bulk} m tbd") # not uprated
 
-    layer  = layer0.to_StandardOpaqueMaterial
-    expect(layer).to_not be_empty
-    siding = layer.get.thickness / layer.get.thermalConductivity
-    layer  = layer2.to_StandardOpaqueMaterial
-    expect(layer).to_not be_empty
-    gypsum = layer.get.thickness / layer.get.thermalConductivity
-    extra  = siding + gypsum + wall1[:f]
-
-    wall_surfaces = []
+    uA = 0
+    m2 = 0
 
     model.getSurfaces.each do |s|
       next unless s.surfaceType.downcase == "wall"
       next unless s.outsideBoundaryCondition.downcase == "outdoors"
-      next     if s.construction.empty?
-      next     if s.construction.get.to_LayeredConstruction.empty?
 
+      expect(s.construction).to_not be_empty
+      expect(s.construction.get.to_LayeredConstruction).to_not be_empty
       c = s.construction.get.to_LayeredConstruction.get
       expect(c.numLayers).to eq(3)
       expect(c.layers[0]).to eq(layer0) # same as Bulk Storage Roof
       expect(c.layers[1].nameString).to include(" uprated ")
       expect(c.layers[1].nameString).to include(" m tbd")
       expect(c.layers[2]).to eq(layer2) # same as Bul;k Storage Roof
-      wall_surfaces << s
+
+      m2 += s.netArea
+      uA += s.netArea / TBD.rsi(c, s.filmResistance)
     end
 
-    expect(wall_surfaces.size).to eq(10)
+    ut = uA / m2
+    expect(ut.round(3)).to eq(0.210) # R27, per NECB 2017 requirements
 
     # TBD objects.
     expect(surfaces).to have_key(bulk)
-    expect(surfaces[bulk]).to have_key(:construction) # not yet derated
     expect(surfaces[bulk]).to have_key(:net)
     expect(surfaces[bulk]).to have_key(:heatloss)
     expect(surfaces[bulk][:heatloss]).to be_within(TOL).of(  49.80)
     expect(surfaces[bulk][:net     ]).to be_within(TOL).of(3157.28)
+    expect(surfaces[bulk]).to have_key(:construction) # not yet derated
     nom = surfaces[bulk][:construction].nameString
     expect(nom).to include("cloned")
-
-    uprated = model.getConstructionByName(w1) # uprated, not yet derated
-    expect(uprated).to_not be_empty
-    uprated = uprated.get
-    expect(uprated.to_LayeredConstruction).to_not be_empty
-    uprated = uprated.to_LayeredConstruction.get
-    expect(uprated.layers.size).to eq(3)
-
-    uprated_layer_r = 0
-
-    uprated.layers.each do |layer|
-      next unless layer.nameString.include?("uprated")
-
-      expect(layer.to_MasslessOpaqueMaterial).to_not be_empty
-      layer = layer.to_MasslessOpaqueMaterial.get
-
-      # The switch from "poor" to "efficient" thermal bridging details is key.
-      uprated_layer_r = layer.thermalResistance
-      expect(uprated_layer_r).to be_within(TOL).of(5.932) # vs 51.92 m2.K/W !!
-    end
-
-    rt = TBD.rsi(uprated, wall1[:f])
-    expect(1/rt).to be_within(TOL).of(0.162) # 6.16 (with surface films), or R35
-    # Still, that R35 factors-in "minor" or "clear-field" thermal bridging
-    # from studs, Z-bars and/or fasteners. The final, nominal insulation layer
-    # may need to be ~R40. That's 8" of XPS in a wall.
-
-    # Loop through all walls, fetch nets areas & heatlosses from psi's.
-    net   = 0
-    hloss = 0
-
-    surfaces.each do |id, surface|
-      next unless surface.key?(:boundary)
-      next unless surface.key?(:construction)
-      next unless surface.key?(:heatloss)
-      next unless surface.key?(:net)
-      next unless surface.key?(:type)
-      next unless surface[:boundary] == "outdoors"
-      next unless surface[:type    ] == :wall
-
-      hloss += surface[:heatloss]
-      net   += surface[:net]
-    end
-
-    expect(hloss).to be_within(TOL).of( 125.48) # vs 485.59 W/K
-    expect(net  ).to be_within(TOL).of(2411.70)
-    u     = hloss / net
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(          4.76) # R27 (NECB2017)
-    expect(new_u).to be_within(TOL).of(argh[:wall_ut]) # 0.210 W/m2.K
-
-    # Bulk storage wall demonstration.
-    wll1 = "Bulk Storage Left Wall"
-    wll2 = "Bulk Storage Rear Wall"
-    wll3 = "Bulk Storage Right Wall"
-    rs = {}
-
-    [wll1, wll2, wll3].each do |i|
-      sface = model.getSurfaceByName(i)
-      expect(sface).to_not be_empty
-      sface = sface.get
-
-      c = sface.construction
-      expect(c).to_not be_empty
-      c = c.get.to_LayeredConstruction
-      expect(c).to_not be_empty
-      c = c.get
-      expect(c.numLayers).to eq(3)
-
-      layer = c.layers[0].to_StandardOpaqueMaterial
-      expect(layer).to_not be_empty
-
-      d = layer.get.thickness
-      k = layer.get.thermalConductivity
-      expect(d / k).to be_within(TOL).of(siding)
-
-      layer = c.layers[1].to_MasslessOpaqueMaterial
-      expect(layer).to_not be_empty
-
-      rsi = layer.get.thermalResistance
-      expect(rsi).to be_within(TOL).of(4.3381) if i == wll1 # vs 4.1493 m2.K/W
-      expect(rsi).to be_within(TOL).of(4.8052) if i == wll2 # vs 5.4252 m2.K/W
-      expect(rsi).to be_within(TOL).of(4.7446) if i == wll3 # vs 5.3642 m2.K/W
-
-      layer = c.layers[2].to_StandardOpaqueMaterial
-      expect(layer).to_not be_empty
-      d = layer.get.thickness
-      k = layer.get.thermalConductivity
-      expect(d / k).to be_within(TOL).of(gypsum)
-
-      u = c.thermalConductance
-      expect(u).to_not be_empty
-      rs[i] = 1 / u.get
-    end
-
-    expect(rs).to have_key(wll1)
-    expect(rs).to have_key(wll2)
-    expect(rs).to have_key(wll3)
-
-    expect(rs[wll1]).to be_within(TOL).of(4.4175) # vs 4.2287 m2.K/W
-    expect(rs[wll2]).to be_within(TOL).of(4.8847) # vs 5.5046 m2.K/W
-    expect(rs[wll3]).to be_within(TOL).of(4.8240) # vs 5.4436 m2.K/W
-
-    u = surfaces[wll1][:heatloss] / surfaces[wll1][:net]
-    expect(u).to be_within(TOL).of(0.0619) # vs 0.2217 W/m2.K from bridging
-
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(4.5671) # R26, vs R24.9
-    ratio = -(uprated_layer_r - de_r) * 100 / rt
-    expect(ratio).to be_within(TOL).of(-25.87) # vs -91.60 %
-    expect(surfaces[wll1]).to have_key(:ratio)
-    expect(surfaces[wll1][:ratio]).to be_within(TOL).of(ratio)
-
-    u = surfaces[wll2][:heatloss] / surfaces[wll2][:net]
-    expect(u).to be_within(TOL).of(0.0395) # vs 0.1652 W/m2.K from bridging
-
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(5.0342)# R28.6, vs R32.1
-    ratio = -(uprated_layer_r - de_r) * 100 / rt
-    expect(ratio).to be_within(TOL).of(-18.29) # vs -89.16%
-    expect(surfaces[wll2]).to have_key(:ratio)
-    expect(surfaces[wll2][:ratio]).to be_within(TOL).of(ratio)
-
-    u = surfaces[wll3][:heatloss] / surfaces[wll3][:net]
-    expect(u).to be_within(TOL).of(0.0422)# vs 0.1671 W/m2.K from bridging
-
-    de_u  = 1 / uprated_layer_r + u
-    de_r  = 1 / de_u
-    new_r = de_r + extra
-    new_u = 1 / new_r
-    expect(new_r).to be_within(TOL).of(4.9735) # R28.2, vs R31.8
-    ratio = -(uprated_layer_r - de_r) * 100 / rt
-    expect(ratio).to be_within(TOL).of(-19.27) # vs -89.27%
-    expect(surfaces[wll3]).to have_key(:ratio)
-    expect(surfaces[wll3][:ratio]).to be_within(TOL).of(ratio)
 
     file = File.join(__dir__, "files/osms/out/up3_warehouse.osm")
     model.save(file, true)
@@ -10163,7 +9646,7 @@ RSpec.describe TBD_Tests do
 
     model.getSurfaces.each do |s|
       next unless s.surfaceType == "Wall"
-      next unless s.outsideBoundaryCondition.downcase == "outdoors"
+      next unless s.outsideBoundaryCondition == "Outdoors"
 
       walls << s.nameString
       c = s.construction
@@ -10183,14 +9666,13 @@ RSpec.describe TBD_Tests do
     insulation = construction.layers[2].to_StandardOpaqueMaterial
     expect(insulation).to_not be_empty
     insulation = insulation.get
-    expect(insulation.thickness).to be_within(0.0001).of(0.0794)
-    expect(insulation.thermalConductivity).to be_within(0.0001).of(0.0432)
+    expect(insulation.thickness.round(4)).to eq(0.0794)
+    expect(insulation.thermalConductivity.round(4)).to eq(0.0432)
     original_r = insulation.thickness / insulation.thermalConductivity
-    expect(original_r).to be_within(TOL).of(1.8380)
+    expect(original_r.round(4)).to eq(1.8380)
 
     argh = { option: "efficient (BETBG)" } # all PSI-factors @ 0.2 W/K•m
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -10304,14 +9786,19 @@ RSpec.describe TBD_Tests do
     surfaces = json[:surfaces]
     expect(TBD.warn?).to be true
     expect(TBD.logs.size).to eq(2)
-    expect(TBD.logs.first[:message]).to include("Zero")
-    expect(TBD.logs.first[:message]).to include(": new Rsi")
-    expect(TBD.logs.last[ :message]).to include("Unable to uprate")
-
-    expect(argh).to_not have_key(:wall_uo)
-    expect(argh).to     have_key(:roof_uo)
+    expect(TBD.logs.first[:message]).to include("Negative ")
+    expect(TBD.logs.first[:message]).to include(" new Uo' (TBD::uo)")
+    expect(TBD.logs.last[:message]).to include("Unable to completely uprate ")
+    expect(argh).to have_key(:wall_uo)
+    expect(argh).to have_key(:roof_uo)
+    expect(argh[:wall_uo]).to_not be_nil
     expect(argh[:roof_uo]).to_not be_nil
-    expect(argh[:roof_uo]).to be_within(TOL).of(0.118) # RSi 8.47 (R48)
+
+    # Although the roof construction is correctly uprated, it is not possible to
+    # completely uprate the wall construction. It is therefore capped at the
+    # minimum allowed Uo-factor, or ~9 ft of XPS insulation.
+    expect(argh[:wall_uo].round(3)).to eq(0.010) # RSi 100.00 (R568)
+    expect(argh[:roof_uo].round(3)).to eq(0.121) # RSi   8.26 ( R47)
 
     # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
     # Final attempt, with PSI-factors of 0.09 W/K per linear metre (JSON file).
@@ -10332,52 +9819,70 @@ RSpec.describe TBD_Tests do
     argh[:wall_ut     ] = 0.210 # NECB CZ7 2017 (RSi 4.76 / R27)
     argh[:roof_ut     ] = 0.138 # NECB CZ7 2017 (RSi 7.25 / R41)
 
-    json      = TBD.process(model, argh)
+    json     = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
-    io        = json[:io      ]
-    surfaces  = json[:surfaces]
+    io       = json[:io      ]
+    surfaces = json[:surfaces]
     expect(TBD.status).to be_zero
 
     expect(argh).to have_key(:wall_uo)
     expect(argh).to have_key(:roof_uo)
     expect(argh[:wall_uo]).to_not be_nil
     expect(argh[:roof_uo]).to_not be_nil
-    expect(argh[:wall_uo]).to be_within(TOL).of(0.086) # RSi 11.63 (R66)
-    expect(argh[:roof_uo]).to be_within(TOL).of(0.129) # RSi  7.75 (R44)
+    expect(argh[:wall_uo].round(3)).to eq(0.089) # RSi 11.24 (R64)
+    expect(argh[:roof_uo].round(3)).to eq(0.132) # RSi  7.58 (R43)
+
+    uA = 0
+    m2 = 0
 
     model.getSurfaces.each do |s|
+      id = s.nameString
       next unless s.surfaceType == "Wall"
-      next unless s.outsideBoundaryCondition.downcase == "outdoors"
+      next unless s.outsideBoundaryCondition == "Outdoors"
 
-      walls << s.nameString
+      walls << id
+
+      expect(s.isConstructionDefaulted).to be false
       c = s.construction
       expect(c).to_not be_empty
       c = c.get.to_LayeredConstruction
       expect(c).to_not be_empty
       c = c.get
-
       expect(c.nameString).to include(" c tbd")
       expect(c.layers.size).to eq(4)
+
+      r = TBD.rsi(c, TBD.filmResistances(:wall))
+      expect(r.round(3)).to eq(4.805) if id == "Surface 20" || id == "Surface 8"
+      expect(r.round(3)).to eq(4.679) if id == "Surface 14" || id == "Surface 2"
+      m2 += s.netArea
+      uA += s.netArea / r
 
       insul = c.layers[2].to_StandardOpaqueMaterial
       expect(insul).to_not be_empty
       insul = insul.get
       expect(insul.nameString).to include(" uprated m tbd")
 
-      k1 = (insul.thermalConductivity - 0.0261).round(4) == 0
-      k2 = (insul.thermalConductivity - 0.0253).round(4) == 0
-      expect(k1 || k2).to be true
-      expect(insul.thickness).to be_within(0.0001).of(0.1120)
+      k = insul.thermalConductivity
+      expect(k.round(3)).to eq(0.025) if id == "Surface 20" || id == "Surface 8"
+      expect(k.round(3)).to eq(0.026) if id == "Surface 14" || id == "Surface 2"
+      expect(insul.thickness.round(4)).to eq(0.1120)
     end
+
+    expect(m2.round(2)).to eq(273.60)
+    expect(uA.round(2)).to eq(57.45)
+
+    # Reach NECB required Ut for walls?
+    ut = uA / m2
+    expect(ut.round(3)).to eq(argh[:wall_ut].round(3)) # 0.210
 
     walls.each do |wall|
       expect(surfaces).to have_key(wall)
       expect(surfaces[wall]).to have_key(:r) # uprated, non-derated layer Rsi
       expect(surfaces[wall]).to have_key(:u) # uprated, non-derated assembly
-      expect(surfaces[wall][:r]).to be_within(0.001).of(11.205) # R64
-      expect(surfaces[wall][:u]).to be_within(0.001).of( 0.086) # R66
+      expect(surfaces[wall][:r].round(3)).to eq(11.205) # R64
+      expect(surfaces[wall][:u].round(3)).to eq( 0.086) # R66
     end
 
     # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
@@ -10436,7 +9941,14 @@ RSpec.describe TBD_Tests do
     argh[:wall_ut     ] = 0.210 # NECB CZ7 2017 (RSi 4.76 / R41)
 
     TBD.process(model, argh)
+    expect(TBD.warn?).to be true
+    expect(TBD.logs.size).to eq(2)
+    expect(TBD.logs.first[:message]).to include("Negative ")
+    expect(TBD.logs.first[:message]).to include(" new Uo' (TBD::uo)")
+    expect(TBD.logs.last[:message]).to include("Unable to completely uprate ")
+
     expect(argh).to_not have_key(:roof_uo)
+    expect(argh).to     have_key(:wall_uo)
 
     # OpenStudio prior to v3.5.X had a 3m maximum layer thickness, reflecting a
     # previous v8.8 EnergyPlus constraint. TBD caught such cases when uprating
@@ -10449,14 +9961,15 @@ RSpec.describe TBD_Tests do
     # calculations - happens with very thick materials. Recent 2025 TBD changes
     # have removed this check. Users of pre-v3.5.X OpenStudio should expect
     # OS-generated simulation failures when uprating (extremes cases). Achtung!
-    expect(TBD.status).to be_zero
-    expect(argh).to have_key(:wall_uo)
-    expect(argh[:wall_uo]).to be_within(0.0001).of(UMIN) # RSi 100 (R568)
+    expect(argh[:wall_uo].round(4)).to eq(UMIN) # RSi 100 (R568)
 
     nb = 0
+    m2 = 0
+    uA = 0
 
     model.getSurfaces.each do |s|
       next unless s.surfaceType.downcase == "wall"
+      next unless s.outsideBoundaryCondition.downcase == "outdoors"
 
       c = s.construction
       expect(c).to_not be_empty
@@ -10464,7 +9977,7 @@ RSpec.describe TBD_Tests do
       next if c.empty?
 
       c = c.get
-      next unless c.nameString.include?("c tbd")
+      expect(c.nameString).to include("c tbd")
 
       lyr = TBD.insulatingLayer(c)
       expect(lyr).to be_a(Hash)
@@ -10477,11 +9990,16 @@ RSpec.describe TBD_Tests do
       insul = insul.to_StandardOpaqueMaterial
       expect(insul).to_not be_empty
       insul = insul.get
-      expect(insul.thickness).to be_within(TOL).of(1.00)
+      expect(insul.thickness.round(3)).to eq(DMAX) # 1m
 
+      r   = TBD.rsi(c, s.filmResistance)
+      m2 += s.netArea
+      uA += s.netArea / r
       nb += 1
     end
 
+    ut = uA / m2
+    expect((uA/m2).round(2)).to eq(argh[:wall_ut].round(2))
     expect(nb).to eq(4)
   end
 
@@ -11887,8 +11405,7 @@ RSpec.describe TBD_Tests do
     expect(TBD.status).to be_zero
 
     argh = { option: "code (Quebec)" }
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(TBD.status).to be_zero
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
@@ -11931,8 +11448,7 @@ RSpec.describe TBD_Tests do
     expect(TBD.status).to be_zero
 
     argh = { option: "code (Quebec)" }
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -11993,7 +11509,6 @@ RSpec.describe TBD_Tests do
 
     argh = { option: "code (Quebec)" }
     json = TBD.process(model, argh)
-    puts TBD.logs
     expect(TBD.status).to be_zero
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
@@ -12019,7 +11534,6 @@ RSpec.describe TBD_Tests do
     gra = TBD.grossRoofArea(model.getSpaces)
     tm2 = srr * gra
     rm2 = TBD.addSkyLights(model.getSpaces, {area: tm2})
-    puts TBD.logs unless TBD.logs.empty?
     expect(TBD.status).to be_zero
     expect(rm2.round(2)).to eq(gra.round(2))
 
@@ -12032,7 +11546,14 @@ RSpec.describe TBD_Tests do
     argh[:wall_ut     ] = 0.215 # NECB 2020 CZ7A (RSi 4.65 / R26)
     argh[:roof_ut     ] = 0.121 # NECB 2020 CZ7A (RSi 8.26 / R47)
     json = TBD.process(model, argh)
-    expect(TBD.status).to be_zero
+    expect(TBD.warn?).to be true
+    expect(TBD.logs.size).to eq(4)
+    expect(TBD.logs[0][:message]).to include("Negative ")
+    expect(TBD.logs[2][:message]).to include("Negative ")
+    expect(TBD.logs[0][:message]).to include(" new Uo' (TBD::uo)")
+    expect(TBD.logs[2][:message]).to include(" new Uo' (TBD::uo)")
+    expect(TBD.logs[1][:message]).to include("Unable to completely uprate ")
+    expect(TBD.logs[3][:message]).to include("Unable to completely uprate ")
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -12045,6 +11566,8 @@ RSpec.describe TBD_Tests do
 
     file = File.join(__dir__, "files/osms/out/office_attic_sky.osm")
     model.save(file, true)
+
+    TBD.clean!
 
     # -- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- ---- -- #
     # 5Zone_2 test case (as INDIRECTLYCONDITIONED plenum).
@@ -12073,11 +11596,11 @@ RSpec.describe TBD_Tests do
     expect(TBD.unconditioned?(plnum)).to be true
     expect(TBD.setpoints(plnum)[:heating]).to be_nil
     expect(TBD.setpoints(plnum)[:cooling]).to be_nil
+    puts TBD.logs
     expect(TBD.status).to be_zero
 
-    argh  = { option: "uncompliant (Quebec)" }
-
-    json     = TBD.process(model, argh)
+    argh = { option: "uncompliant (Quebec)" }
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -12135,8 +11658,7 @@ RSpec.describe TBD_Tests do
     model.save(file, true)
 
     argh = { option: "uncompliant (Quebec)" }
-
-    json     = TBD.process(model, argh)
+    json = TBD.process(model, argh)
     expect(json).to be_a(Hash)
     expect(json).to have_key(:io)
     expect(json).to have_key(:surfaces)
@@ -12281,9 +11803,8 @@ RSpec.describe TBD_Tests do
       expect(heated).to be false
       expect(cooled).to be false
 
-      argh  = { option: "code (Quebec)" }
-
-      json     = TBD.process(model, argh)
+      argh = { option: "code (Quebec)" }
+      json = TBD.process(model, argh)
       expect(json).to be_a(Hash)
       expect(json).to have_key(:io)
       expect(json).to have_key(:surfaces)
@@ -12378,8 +11899,13 @@ RSpec.describe TBD_Tests do
         c = c.get.to_LayeredConstruction
         expect(c).to_not be_empty
         c = c.get
-        f = TBD.filmResistances(:ceiling, s.tilt)
-        expect(TBD.rsi(c, f)).to be_within(TOL).of(6.44)
+
+        rsi1 = s.filmResistance
+        rsi2 = TBD.filmResistances(:roof)
+        rsi3 = TBD.filmResistances(:roof, s.tilt)
+        expect(TBD.rsi(c, rsi1)).to be_within(TOL).of(6.38)
+        expect(TBD.rsi(c, rsi2)).to be_within(TOL).of(6.31)
+        expect(TBD.rsi(c, rsi3)).to be_within(TOL).of(6.31)
 
         construction = c if construction.nil?
         expect(c).to eq(construction)
@@ -12471,8 +11997,9 @@ RSpec.describe TBD_Tests do
 
       surfaces.each do |nom, surface|
         expect(surface).to be_a(Hash)
-        expect(surface).to have_key(:filmRSI)
+
         expect(surface).to have_key(:conditioned)
+        expect(surface).to have_key(:filmRSI)
         expect(surface).to have_key(:deratable)
         expect(surface).to have_key(:construction)
         expect(surface).to have_key(:ground)
@@ -12597,8 +12124,7 @@ RSpec.describe TBD_Tests do
       expect(TBD.plenum?(attic)).to be true # works ...
 
       argh = { option: "code (Quebec)" }
-
-      json     = TBD.process(model, argh)
+      json = TBD.process(model, argh)
       expect(json ).to be_a(Hash)
       expect(json).to have_key(:io)
       expect(json).to have_key(:surfaces)
@@ -12702,7 +12228,7 @@ RSpec.describe TBD_Tests do
 
       model.getSurfaces.each do |s|
         next unless s.surfaceType == "RoofCeiling"
-        next unless s.outsideBoundaryCondition.downcase == "outdoors"
+        next unless s.outsideBoundaryCondition == "Outdoors"
 
         roofs << s.nameString
         c = s.construction
@@ -12769,8 +12295,8 @@ RSpec.describe TBD_Tests do
 
       surfaces.each do |nom, surface|
         expect(surface).to be_a(Hash)
-        expect(surface).to have_key(:filmRSI)
         expect(surface).to have_key(:conditioned)
+        expect(surface).to have_key(:filmRSI)
         expect(surface).to have_key(:deratable)
         expect(surface).to have_key(:construction)
         expect(surface).to have_key(:ground)
@@ -14922,11 +14448,30 @@ RSpec.describe TBD_Tests do
       argh[:wall_ut     ] = 0.210 # NECB CZ7 2017 (RSi 4.76 / R27)
 
       TBD.process(model, argh)
-      expect(TBD.status).to be_zero
-      expect(TBD.logs).to be_empty
-
+      expect(TBD.warn?).to be true
+      expect(TBD.logs.size).to eq(2)
+      expect(TBD.logs.first[:message]).to include("Negative")
+      expect(TBD.logs.first[:message]).to include(" new Uo' (TBD::uo)")
+      expect(TBD.logs.last[:message]).to include("Unable to completely uprate ")
       expect(argh).to have_key(:wall_uo)
       expect(argh[:wall_uo]).to be_within(TOL).of(0.00236) # RSi 423 (R2K)
+
+      uA = 0
+
+      model.getSurfaces.each do |surface|
+        next unless surface.outsideBoundaryCondition.downcase == "outdoors"
+        next unless surface.surfaceType.downcase == "wall"
+
+        expect(surface.construction).to_not be_empty
+        expect(surface.construction.get.to_LayeredConstruction).to_not be_empty
+
+        lc = surface.construction.get.to_LayeredConstruction.get
+        uo = 1 / TBD.rsi(lc, surface.filmResistance)
+        uA += surface.netArea * uo
+      end
+
+      uo = uA / net
+      expect(uo.round(3)).to eq(0.216) # R21, below NECB 2017 required R27
     end
   end
 
